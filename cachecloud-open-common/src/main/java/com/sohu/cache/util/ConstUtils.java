@@ -1,5 +1,6 @@
 package com.sohu.cache.util;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.ResourceBundle;
 
@@ -45,6 +46,10 @@ public class ConstUtils {
     public static final String PORT_KEY = "port_key";
     public static final String APP_KEY = "app_key";
     public static final String HOST_ID_KEY = "host_id_key";
+    // server job/trigger name/group
+    public static final String SERVER_JOB_NAME = "serverJob";
+    public static final String SERVER_JOB_GROUP = "server";
+    public static final String SERVER_TRIGGER_GROUP = "server-";
 
     //mysql收集数据的时间字段
     public static final String COLLECT_TIME = "CollectTime";
@@ -55,8 +60,13 @@ public class ConstUtils {
     // 容量转换
     public static final int _1024 = 1024;
     
-    // 表示空
-    public static final String NONE = "none";
+    // 表示空字符串
+    public static final String EMPTY = "";
+    
+    /**
+     * 服务端版本
+     */
+    public static final String CACHECLOUD_VERSION = "master";
 
     /**
      * 机器报警阀值
@@ -107,7 +117,7 @@ public class ConstUtils {
     /**
      * ldap登陆
      */
-    public static String DEFAULT_LDAP_URL = NONE;
+    public static String DEFAULT_LDAP_URL = EMPTY;
     public static String LDAP_URL = DEFAULT_LDAP_URL;
     
     /**
@@ -145,13 +155,13 @@ public class ConstUtils {
     /**
      * 邮箱报警接口
      */
-    public static String DEFAULT_EMAIL_ALERT_INTERFACE = NONE;
+    public static String DEFAULT_EMAIL_ALERT_INTERFACE = EMPTY;
     public static String EMAIL_ALERT_INTERFACE = DEFAULT_EMAIL_ALERT_INTERFACE;
     
     /**
      * 短信报警接口
      */
-    public static String DEFAULT_MOBILE_ALERT_INTERFACE = NONE;
+    public static String DEFAULT_MOBILE_ALERT_INTERFACE = EMPTY;
     public static String MOBILE_ALERT_INTERFACE = DEFAULT_MOBILE_ALERT_INTERFACE;
     
     /**
@@ -190,6 +200,10 @@ public class ConstUtils {
         return REDIS_MIGRATE_TOOL_HOME + "src/redis-migrate-tool";
     }
     
+    public static String getRedisMigrateToolDir() {
+        return REDIS_MIGRATE_TOOL_HOME + "data/";
+    }
+    
     /**
      * redis-migrate-tool端口
      */
@@ -204,7 +218,7 @@ public class ConstUtils {
     /**
      * cookie登录方式所需要的域
      */
-    public static String DEFAULT_COOKIE_DOMAIN = NONE;
+    public static String DEFAULT_COOKIE_DOMAIN = EMPTY;
     public static String COOKIE_DOMAIN = DEFAULT_COOKIE_DOMAIN;
     
     /**
@@ -213,6 +227,38 @@ public class ConstUtils {
     public static String DEFAULT_CACHECLOUD_BASE_DIR = "/opt";
     public static String CACHECLOUD_BASE_DIR = DEFAULT_CACHECLOUD_BASE_DIR;
     
+    /**
+     * 是否定期清理各种统计数据：(详见CleanUpStatisticsJob)
+     */
+    public static boolean DEFAULT_WHETHER_SCHEDULE_CLEAN_DATA = false;
+    public static boolean WHETHER_SCHEDULE_CLEAN_DATA = DEFAULT_WHETHER_SCHEDULE_CLEAN_DATA;
+    
+    
+    /**
+     * appkey秘钥
+     */
+    public static String DEFAULT_APP_SECRET_BASE_KEY = "cachecloud-2014";
+    public static String APP_SECRET_BASE_KEY = DEFAULT_APP_SECRET_BASE_KEY;
+    
+    
+    /**
+     * 机器性能统计周期(分钟)
+     */
+    public static int DEFAULT_MACHINE_STATS_CRON_MINUTE = 1;
+    public static int MACHINE_STATS_CRON_MINUTE = DEFAULT_MACHINE_STATS_CRON_MINUTE;
+    
+    
+    /**
+     * 网站域名
+     */
+    public static final String CC_DOMAIN = "http://your.domain.com";
+    
+    /**
+     * 领导邮件
+     */
+    public static List<String> LEADER_EMAIL_LIST = new ArrayList<String>();
+    static {
+    }
     
     static {
         ResourceBundle applicationResourceBundle = ResourceBundle.getBundle("application");
@@ -228,7 +274,28 @@ public class ConstUtils {
      * 换行
      */
     public static final String NEXT_LINE = "\n";
+
+    /**
+     * 空格
+     */
+    public static final String SPACE = " ";
     
+
+    /**
+     * 冒号
+     */
+    public static final String COLON = ":";
+
+    
+    /**
+     * 内部错误
+     */
+    public static final String INNER_ERROR = "cachecloud_inner_error";
+    
+    /**
+     * 登录跳转参数
+     */
+    public final static String RREDIRECT_URL_PARAM = "redirectUrl";
 
 }
 

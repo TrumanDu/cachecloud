@@ -2,6 +2,7 @@ package com.sohu.cache.web.controller;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -25,8 +26,10 @@ import com.sohu.cache.constant.AppUserTypeEnum;
 import com.sohu.cache.entity.AppToUser;
 import com.sohu.cache.entity.AppUser;
 import com.sohu.cache.entity.InstanceInfo;
+import com.sohu.cache.entity.InstanceSlotModel;
 import com.sohu.cache.entity.InstanceStats;
 import com.sohu.cache.machine.MachineCenter;
+import com.sohu.cache.redis.RedisCenter;
 
 /**
  * 基类controller
@@ -44,6 +47,8 @@ public class BaseController {
     protected MachineCenter machineCenter;
     
     protected UserLoginStatusService userLoginStatusService;
+    
+    protected RedisCenter redisCenter;
 
     public void setUserService(UserService userService) {
         this.userService = userService;
@@ -61,7 +66,11 @@ public class BaseController {
         this.userLoginStatusService = userLoginStatusService;
     }
 
-    /**
+    public void setRedisCenter(RedisCenter redisCenter) {
+		this.redisCenter = redisCenter;
+	}
+
+	/**
      * 返回用户基本信息
      *
      * @param request
@@ -167,6 +176,60 @@ public class BaseController {
         }
         model.addAttribute("instanceList", instanceList);
         model.addAttribute("instanceStatsMap", instanceStatsMap);
+        
+        //slot分布
+        Map<String, InstanceSlotModel> clusterSlotsMap = redisCenter.getClusterSlotsMap(appId);
+		model.addAttribute("clusterSlotsMap", clusterSlotsMap);
+        
+    }
+    
+    /**
+     * 应用机器实例分布图
+     * @param appId
+     * @param model
+     */
+    protected void fillAppMachineInstanceTopology(Long appId, Model model) {
+        List<InstanceInfo> instanceList = appService.getAppInstanceInfo(appId);
+        int groupId = 1;
+        // 1.分组，同一个主从在一组
+        for (int i = 0; i < instanceList.size(); i++) {
+            InstanceInfo instance = instanceList.get(i);
+            // 有了groupId，不再设置
+            if (instance.getGroupId() > 0) {
+                continue;
+            }
+            if (instance.isOffline()) {
+                continue;
+            }
+            for (int j = i + 1; j < instanceList.size(); j++) {
+                InstanceInfo instanceCompare = instanceList.get(j);
+                if (instanceCompare.isOffline()) {
+                    continue;
+                }
+                // 寻找主从对应关系
+                if (instanceCompare.getMasterInstanceId() == instance.getId()
+                        || instance.getMasterInstanceId() == instanceCompare.getId()) {
+                    instanceCompare.setGroupId(groupId);
+                }
+            }
+            instance.setGroupId(groupId++);
+        }
+
+        // 2.机器下的实例列表
+        Map<String, List<InstanceInfo>> machineInstanceMap = new HashMap<String, List<InstanceInfo>>();
+        for (InstanceInfo instance : instanceList) {
+            String ip = instance.getIp();
+            if (machineInstanceMap.containsKey(ip)) {
+                machineInstanceMap.get(ip).add(instance);
+            } else {
+                List<InstanceInfo> tempInstanceList = new ArrayList<InstanceInfo>();
+                tempInstanceList.add(instance);
+                machineInstanceMap.put(ip, tempInstanceList);
+            }
+        }
+
+        model.addAttribute("machineInstanceMap", machineInstanceMap);
+        model.addAttribute("instancePairCount", groupId - 1);
     }
 
 }

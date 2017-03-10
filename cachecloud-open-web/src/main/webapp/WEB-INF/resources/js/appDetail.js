@@ -21,6 +21,51 @@ function deleteAppUser(userId,appId){
 	return false;
 }
 
+
+//改变应用信息
+function updateAppDetailChange(appId){
+	var appDescName = document.getElementById("appDescName");
+	if(appDescName.value == ""){
+		alert("应用名不能为空");
+		appDescName.focus();
+		return false;
+	}
+	var appDescIntro = document.getElementById("appDescIntro");
+	if(appDescIntro.value == ""){
+		alert("应用描述不能为空");
+		appDescIntro.focus();
+		return false;
+	}
+	var officer = document.getElementById("officer");
+	if(officer.value == ""){
+		alert("负责人不能为空");
+		officer.focus();
+		return false;
+	}
+	var updateAppDetailBtn = document.getElementById("updateAppDetailBtn");
+	updateAppDetailBtn.disabled = true;
+	$.post(
+		'/admin/app/updateAppDetail.do',
+		{
+			appId: appId,
+			appDescName: appDescName.value,
+			appDescIntro: appDescIntro.value,
+			officer: officer.value
+		},
+        function(data){
+            if(data==1){
+                alert("修改成功！");
+            	$("#updateAppDetailInfo").html("<div class='alert alert-error' ><button class='close' data-dismiss='alert'>×</button><strong>Success!</strong>更新成功，窗口会自动关闭</div>");
+                setTimeout("$('updateAppDetailModal').modal('hide');reloadAppDetailPage("+appId+");",1000);
+            }else{
+            	updateAppDetailBtn.disabled = false;
+                $("#updateAppDetailInfo").html("<div class='alert alert-error' ><button class='close' data-dismiss='alert'>×</button><strong>Error!</strong>更新失败！</div>");
+            }
+        }
+     );
+}
+
+
 //改变内存阀值
 function appAlertConfigChange(appId){
 	var memAlertValue = document.getElementById("memAlertValue");
@@ -29,13 +74,20 @@ function appAlertConfigChange(appId){
 		memAlertValue.focus();
 		return false;
 	}
+	var clientConnAlertValue = document.getElementById("clientConnAlertValue");
+	if(clientConnAlertValue.value == ""){
+		alert("客户端连接数报警阀值不能为空");
+		clientConnAlertValue.focus();
+		return false;
+	}
 	var appConfigChangeBtn = document.getElementById("appConfigChangeBtn");
 	appConfigChangeBtn.disabled = true;
 	$.post(
 		'/admin/app/changeAppAlertConfig.do',
 		{
 			appId: appId,
-			memAlertValue: memAlertValue.value
+			memAlertValue: memAlertValue.value,
+			clientConnAlertValue: clientConnAlertValue.value
 		},
         function(data){
             if(data==1){

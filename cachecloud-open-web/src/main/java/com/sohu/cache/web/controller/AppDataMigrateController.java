@@ -3,9 +3,11 @@ package com.sohu.cache.web.controller;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
@@ -19,10 +21,12 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.servlet.ModelAndView;
 
-import com.sohu.cache.constant.MachineTypeEnum;
+import com.sohu.cache.constant.CommandResult;
+import com.sohu.cache.constant.MachineInfoEnum;
 import com.sohu.cache.constant.AppDataMigrateEnum;
 import com.sohu.cache.constant.AppDataMigrateResult;
 import com.sohu.cache.constant.RedisMigrateToolConstant;
+import com.sohu.cache.entity.AppDataMigrateSearch;
 import com.sohu.cache.entity.AppDataMigrateStatus;
 import com.sohu.cache.entity.AppDesc;
 import com.sohu.cache.entity.AppUser;
@@ -57,6 +61,16 @@ public class AppDataMigrateController extends BaseController {
     
     @Resource(name = "redisCenter")
     private RedisCenter redisCenter;
+    
+    private static Set<String> MIGRATE_SAMPLE_USEFUL_LINES = new HashSet<String>();
+    static {
+        MIGRATE_SAMPLE_USEFUL_LINES.add("Checked keys");
+        MIGRATE_SAMPLE_USEFUL_LINES.add("Inconsistent value keys");
+        MIGRATE_SAMPLE_USEFUL_LINES.add("Inconsistent expire keys");
+        MIGRATE_SAMPLE_USEFUL_LINES.add("Other check error keys");
+        MIGRATE_SAMPLE_USEFUL_LINES.add("Checked OK keys");
+    }
+    
 
     /**
      * 初始化界面
@@ -64,7 +78,7 @@ public class AppDataMigrateController extends BaseController {
      */
     @RequestMapping(value = "/init")
     public ModelAndView init(HttpServletRequest request, HttpServletResponse response, Model model) {
-        List<MachineInfo> machineInfoList = machineCenter.getMachineInfoByType(MachineTypeEnum.REDIS_MIGRATE_TOOL);
+        List<MachineInfo> machineInfoList = machineCenter.getMachineInfoByType(MachineInfoEnum.TypeEnum.REDIS_MIGRATE_TOOL);
         model.addAttribute("machineInfoList", machineInfoList);
         return new ModelAndView("migrate/init");
     }
@@ -83,8 +97,11 @@ public class AppDataMigrateController extends BaseController {
         String targetRedisMigrateIndex = request.getParameter("targetRedisMigrateIndex");
         AppDataMigrateEnum targetRedisMigrateEnum = AppDataMigrateEnum.getByIndex(NumberUtils.toInt(targetRedisMigrateIndex, -1));
         String targetServers = request.getParameter("targetServers");
+        String redisSourcePass = request.getParameter("redisSourcePass");
+        String redisTargetPass = request.getParameter("redisTargetPass");
+
         //检查返回结果
-        AppDataMigrateResult redisMigrateResult = appDataMigrateCenter.check(migrateMachineIp, sourceRedisMigrateEnum, sourceServers, targetRedisMigrateEnum, targetServers);
+        AppDataMigrateResult redisMigrateResult = appDataMigrateCenter.check(migrateMachineIp, sourceRedisMigrateEnum, sourceServers, targetRedisMigrateEnum, targetServers, redisSourcePass, redisTargetPass);
         model.addAttribute("status", redisMigrateResult.getStatus());
         model.addAttribute("message", redisMigrateResult.getMessage());
         return new ModelAndView("");
@@ -106,12 +123,15 @@ public class AppDataMigrateController extends BaseController {
         String targetServers = request.getParameter("targetServers");
         long sourceAppId = NumberUtils.toLong(request.getParameter("sourceAppId"));
         long targetAppId = NumberUtils.toLong(request.getParameter("targetAppId"));
+        String redisSourcePass = request.getParameter("redisSourcePass");
+        String redisTargetPass = request.getParameter("redisTargetPass");
+
         AppUser appUser = getUserInfo(request);
         long userId = appUser == null ? 0 : appUser.getId();
 
         // 不需要对格式进行检验,check已经做过了，开始迁移
         boolean isSuccess = appDataMigrateCenter.migrate(migrateMachineIp, sourceRedisMigrateEnum, sourceServers,
-                targetRedisMigrateEnum, targetServers, sourceAppId, targetAppId, userId);
+                targetRedisMigrateEnum, targetServers, sourceAppId, targetAppId, redisSourcePass, redisTargetPass, userId);
 
         model.addAttribute("status", isSuccess ? 1 : 0);
         return new ModelAndView("");
@@ -182,20 +202,38 @@ public class AppDataMigrateController extends BaseController {
     public ModelAndView checkData(HttpServletRequest request, HttpServletResponse response, Model model) {
         long id = NumberUtils.toLong(request.getParameter("id"));
         int nums = 1000 + new Random().nextInt(2000);
-        //message格式显示有点问题
-        String message = appDataMigrateCenter.sampleCheckData(id, nums);
+        //为了方便，直接传入命令
+        CommandResult commandResult = appDataMigrateCenter.sampleCheckData(id, nums);
+        String message = commandResult.getResult();
         List<String> checkDataResultList = new ArrayList<String>();
         checkDataResultList.add("一共随机检验了" + nums + "个key" + ",检查结果如下:");
         String[] lineArr = message.split(ConstUtils.NEXT_LINE);
         for (String line : lineArr) {
-            if (StringUtils.isNotBlank(line)) {
-                line = line.replace("[0m", "");
-                line = line.replace("[31m", "");
+            if (StringUtils.isBlank(line)) {
+                continue;
             }
+            // 行数太多显示会有问题
+            if (lineArr.length > 100 && !isUsefulLine(line)) {
+                continue;
+            }
+            //message格式显示有点问题
+            line = line.replace("[0m", "");
+            line = line.replace("[31m", "");
+            line = line.replace("[33m", "");
             checkDataResultList.add(line.trim());
         }
         model.addAttribute("checkDataResultList", checkDataResultList);
+        model.addAttribute("checkDataCommand", commandResult.getCommand());
         return new ModelAndView("migrate/checkData");
+    }
+
+    private boolean isUsefulLine(String line) {
+        for (String usefulLine : MIGRATE_SAMPLE_USEFUL_LINES) {
+            if (line.contains(usefulLine)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -203,9 +241,10 @@ public class AppDataMigrateController extends BaseController {
      * @return
      */
     @RequestMapping(value = "/list")
-    public ModelAndView list(HttpServletRequest request, HttpServletResponse response, Model model) {
-        List<AppDataMigrateStatus> appDataMigrateStatusList = appDataMigrateCenter.search();
+    public ModelAndView list(HttpServletRequest request, HttpServletResponse response, Model model, AppDataMigrateSearch appDataMigrateSearch) {
+        List<AppDataMigrateStatus> appDataMigrateStatusList = appDataMigrateCenter.search(appDataMigrateSearch);
         model.addAttribute("appDataMigrateStatusList", appDataMigrateStatusList);
+        model.addAttribute("appDataMigrateSearch", appDataMigrateSearch);
         return new ModelAndView("migrate/list");
     }
     

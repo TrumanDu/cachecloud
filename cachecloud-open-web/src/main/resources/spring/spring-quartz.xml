@@ -30,12 +30,14 @@
         <property name="triggers">
             <array>
                 <ref bean="errorStatisticsTrigger"/>
+                <ref bean="systemConfigRefreshTrigger"/>
             </array>
         </property>
 
         <property name="jobDetails">
             <array>
                 <ref bean="errorStatisticsJobDetail"/>
+                <ref bean="systemConfigRefreshJobDetail"/>
             </array>
         </property>
     </bean>
@@ -48,12 +50,12 @@
         <!-- 最大线程数 -->
         <property name="maxPoolSize" value="200"/>
         <!-- 队列最大长度 >=mainExecutor.maxSize -->
-        <property name="queueCapacity" value="1000"/>
+        <property name="queueCapacity" value="10"/>
         <!-- 线程池维护线程所允许的空闲时间 -->
         <property name="keepAliveSeconds" value="300"/>
         <!-- 拒绝任务策略:被拒绝后直接在调用者线程中运行当前被放弃任务 -->
         <property name="rejectedExecutionHandler">
-            <bean class="java.util.concurrent.ThreadPoolExecutor$CallerRunsPolicy"/>
+            <bean class="java.util.concurrent.ThreadPoolExecutor$AbortPolicy"/>
         </property>
     </bean>
  
@@ -96,16 +98,21 @@
                 <ref bean="cleanUpStatisticsTrigger"/>
                 <ref bean="hostInspectorTrigger"/>
                 <ref bean="appInspectorTrigger"/>
+                <ref bean="appDailyTrigger"/>
+                <ref bean="instanceAlertValueTrigger"/>
             </array>
         </property>
         <property name="jobDetails">
             <array>
                 <ref bean="redisJobDetail"/>
                 <ref bean="machineJobDetail"/>
+                <ref bean="serverJobDetail"/>
                 <ref bean="machineMonitorJobDetail"/>
                 <ref bean="redisSlowLogJobDetail"/>
                 <ref bean="cleanUpStatisticsJobDetail"/>
                 <ref bean="inspectorJobDetail"/>
+                <ref bean="appDailyJobDetail"/>
+                <ref bean="instanceAlertValueJobDetail"/>
             </array>
         </property>
 
@@ -123,6 +130,13 @@
         <property name="name" value="machineJob"/>
         <property name="group" value="machine"/>
         <property name="jobClass" value="com.sohu.cache.schedule.jobs.MachineJob"/>
+        <property name="requestsRecovery" value="true"/>
+        <property name="durability" value="true"/>
+    </bean>
+    <bean id="serverJobDetail" class="org.springframework.scheduling.quartz.JobDetailFactoryBean">
+        <property name="name" value="serverJob"/>
+        <property name="group" value="server"/>
+        <property name="jobClass" value="com.sohu.cache.schedule.jobs.ServerJob"/>
         <property name="requestsRecovery" value="true"/>
         <property name="durability" value="true"/>
     </bean>
@@ -205,5 +219,52 @@
         <property name="jobDetail" ref="errorStatisticsJobDetail"/>
         <property name="cronExpression" value="0 0 10 * * ?"/>
     </bean>
+    
+    <bean id="systemConfigRefreshJobDetail" class="org.springframework.scheduling.quartz.JobDetailFactoryBean">
+        <property name="name" value="systemConfigRefreshJobDetail"></property>
+        <property name="group" value="systemConfigRefreshGroup"></property>
+        <property name="jobClass" value="com.sohu.cache.schedule.jobs.SystemConfigRefreshJob"></property>
+        <property name="durability" value="true" />
+    </bean>
+    
+    <bean id="systemConfigRefreshTrigger" class="org.springframework.scheduling.quartz.CronTriggerFactoryBean">
+        <property name="name" value="systemConfigRefreshTrigger"/>
+        <property name="group" value="systemConfigRefreshGroup"/>
+        <property name="jobDetail" ref="systemConfigRefreshJobDetail"/>
+        <property name="cronExpression" value="0/30 * * ? * *"/>
+    </bean>
+    
+    
+    <bean id="appDailyJobDetail" class="org.springframework.scheduling.quartz.JobDetailFactoryBean">
+        <property name="name" value="appDailyJob"></property>
+        <property name="group" value="appDaily"></property>
+        <property name="jobClass" value="com.sohu.cache.schedule.jobs.AppDailyJob"></property>
+        <property name="requestsRecovery" value="true"/>
+        <property name="durability" value="true"/>
+    </bean>
+
+    <bean id="appDailyTrigger" class="org.springframework.scheduling.quartz.CronTriggerFactoryBean">
+        <property name="name" value="appDailyTrigger"/>
+        <property name="group" value="appDaily"/>
+        <property name="jobDetail" ref="appDailyJobDetail"/>
+        <property name="cronExpression" value="0 0 10 * * ?"/>
+    </bean>
+    
+    
+    <bean id="instanceAlertValueJobDetail" class="org.springframework.scheduling.quartz.JobDetailFactoryBean">
+        <property name="name" value="instanceAlertValueJob"></property>
+        <property name="group" value="instanceAlertValue"></property>
+        <property name="jobClass" value="com.sohu.cache.schedule.jobs.InstanceAlertValueJob"></property>
+        <property name="requestsRecovery" value="true"/>
+        <property name="durability" value="true"/>
+    </bean>
+    
+    <bean id="instanceAlertValueTrigger" class="org.springframework.scheduling.quartz.CronTriggerFactoryBean">
+        <property name="name" value="instanceAlertValueTrigger"/>
+        <property name="group" value="instanceAlertValue"/>
+        <property name="jobDetail" ref="instanceAlertValueJobDetail"/>
+        <property name="cronExpression" value="0 0/1 * ? * *"/>
+    </bean>
+    
 
 </beans>

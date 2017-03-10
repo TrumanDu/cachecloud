@@ -83,6 +83,8 @@ public class ImportAppCenterImpl implements ImportAppCenter {
                 MachineInfo machineInfo = machineCenter.getMachineInfoByIp(ip);
                 if (machineInfo == null) {
                     return ImportAppResult.fail(appInstance + "中的ip不存在");
+                } else if (machineInfo.isOffline()) {
+                    return ImportAppResult.fail(appInstance + "中的ip已经被删除");
                 }
             } catch (Exception e) {
                 return ImportAppResult.fail(appInstance + "中的ip不存在");
@@ -143,9 +145,12 @@ public class ImportAppCenterImpl implements ImportAppCenter {
     public boolean importAppAndInstance(AppDesc appDesc, String appInstanceInfo) {
         boolean isSuccess = true;
         try {
-            // 1.保存应用信息
+            // 1.1 保存应用信息
             appService.save(appDesc);
             long appId = appDesc.getAppId();
+            // 1.2 更新appKey
+            appService.updateAppKey(appId);
+
             int type = appDesc.getType();
             // 2.保存应用和用户的关系
             appService.saveAppToUser(appId, appDesc.getUserId());

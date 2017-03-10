@@ -1,38 +1,6 @@
 package com.sohu.cache.machine.impl;
 
-import com.google.common.base.Strings;
-import com.sohu.cache.constant.InstanceStatusEnum;
-import com.sohu.cache.constant.MachineConstant;
-import com.sohu.cache.constant.MachineTypeEnum;
-import com.sohu.cache.dao.InstanceDao;
-import com.sohu.cache.dao.InstanceStatsDao;
-import com.sohu.cache.dao.MachineDao;
-import com.sohu.cache.dao.MachineStatsDao;
-import com.sohu.cache.entity.*;
-import com.sohu.cache.exception.SSHException;
-import com.sohu.cache.machine.MachineCenter;
-import com.sohu.cache.machine.PortGenerator;
-import com.sohu.cache.protocol.MachineProtocol;
-import com.sohu.cache.redis.RedisCenter;
-import com.sohu.cache.schedule.SchedulerCenter;
-import com.sohu.cache.ssh.SSHUtil;
-import com.sohu.cache.stats.instance.InstanceStatsCenter;
-import com.sohu.cache.util.ConstUtils;
-import com.sohu.cache.util.ObjectConvert;
-import com.sohu.cache.util.ScheduleUtil;
-import com.sohu.cache.util.TypeUtil;
-import com.sohu.cache.web.component.EmailComponent;
-import com.sohu.cache.web.component.MobileAlertComponent;
-
-import org.apache.commons.lang.StringUtils;
-import org.quartz.JobKey;
-import org.quartz.Trigger;
-import org.quartz.TriggerKey;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.util.Assert;
-
-import redis.clients.jedis.HostAndPort;
+import static com.google.common.base.Preconditions.checkArgument;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -47,12 +15,54 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
-import static com.google.common.base.Preconditions.checkArgument;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections.MapUtils;
+import org.apache.commons.lang.StringUtils;
+import org.quartz.JobKey;
+import org.quartz.Trigger;
+import org.quartz.TriggerKey;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.util.Assert;
+
+import redis.clients.jedis.HostAndPort;
+
+import com.google.common.base.Strings;
+import com.sohu.cache.async.AsyncService;
+import com.sohu.cache.async.AsyncThreadPoolFactory;
+import com.sohu.cache.async.KeyCallable;
+import com.sohu.cache.constant.InstanceStatusEnum;
+import com.sohu.cache.constant.MachineConstant;
+import com.sohu.cache.constant.MachineInfoEnum.TypeEnum;
+import com.sohu.cache.dao.InstanceDao;
+import com.sohu.cache.dao.InstanceStatsDao;
+import com.sohu.cache.dao.MachineDao;
+import com.sohu.cache.dao.MachineStatsDao;
+import com.sohu.cache.entity.InstanceInfo;
+import com.sohu.cache.entity.InstanceStats;
+import com.sohu.cache.entity.MachineInfo;
+import com.sohu.cache.entity.MachineMemInfo;
+import com.sohu.cache.entity.MachineStats;
+import com.sohu.cache.exception.SSHException;
+import com.sohu.cache.machine.MachineCenter;
+import com.sohu.cache.machine.PortGenerator;
+import com.sohu.cache.protocol.MachineProtocol;
+import com.sohu.cache.redis.RedisCenter;
+import com.sohu.cache.schedule.SchedulerCenter;
+import com.sohu.cache.ssh.SSHUtil;
+import com.sohu.cache.stats.instance.InstanceStatsCenter;
+import com.sohu.cache.util.ConstUtils;
+import com.sohu.cache.util.IdempotentConfirmer;
+import com.sohu.cache.util.ObjectConvert;
+import com.sohu.cache.util.ScheduleUtil;
+import com.sohu.cache.util.TypeUtil;
+import com.sohu.cache.web.component.EmailComponent;
+import com.sohu.cache.web.component.MobileAlertComponent;
 
 /**
  * 机器接口的实现
- * <p/>
  * User: lingguo
  * Date: 14-6-12
  * Time: 上午10:46
@@ -84,6 +94,13 @@ public class MachineCenterImpl implements MachineCenter {
      * 手机短信报警
      */
     private MobileAlertComponent mobileAlertComponent;
+    
+	private AsyncService asyncService;
+	
+	public void init() {
+		asyncService.assemblePool(AsyncThreadPoolFactory.MACHINE_POOL, 
+				AsyncThreadPoolFactory.MACHINE_THREAD_POOL);
+	}
 
     /**
      * 为当前机器收集信息创建trigger并部署
@@ -102,7 +119,7 @@ public class MachineCenterImpl implements MachineCenter {
         dataMap.put(ConstUtils.HOST_ID_KEY, hostId);
         JobKey jobKey = JobKey.jobKey(ConstUtils.MACHINE_JOB_NAME, ConstUtils.MACHINE_JOB_GROUP);
         TriggerKey triggerKey = TriggerKey.triggerKey(ip, ConstUtils.MACHINE_TRIGGER_GROUP + hostId);
-        boolean result = schedulerCenter.deployJobByCron(jobKey, triggerKey, dataMap, ScheduleUtil.getTenMinuteCronByHostId(hostId), false);
+        boolean result = schedulerCenter.deployJobByCron(jobKey, triggerKey, dataMap, ScheduleUtil.getMachineStatsCron(hostId), false);
 
         return result;
     }
@@ -119,6 +136,21 @@ public class MachineCenterImpl implements MachineCenter {
         return schedulerCenter.unscheduleJob(collectionTriggerKey);
     }
     
+    //异步执行任务
+    public void asyncCollectMachineInfo(final long hostId, final long collectTime, final String ip) {
+    	String key = "collect-machine-"+hostId+"-"+ip+"-"+collectTime;
+		asyncService.submitFuture(AsyncThreadPoolFactory.MACHINE_POOL, new KeyCallable<Boolean>(key) {
+            public Boolean execute() {
+                try {
+                	collectMachineInfo(hostId, collectTime, ip);
+                    return true;
+                } catch (Exception e) {
+                    logger.error(e.getMessage(), e);
+                    return false;
+                }
+            }
+        });
+    }
     
     /**
      * 收集当前host的状态信息，保存到mysql；
@@ -204,6 +236,21 @@ public class MachineCenterImpl implements MachineCenter {
         return schedulerCenter.unscheduleJob(monitorTriggerKey);
     }
     
+    //异步执行任务
+    public void asyncMonitorMachineStats(final long hostId, final String ip) {
+    	String key = "monitor-machine-"+hostId+"-"+ip;
+		asyncService.submitFuture(AsyncThreadPoolFactory.MACHINE_POOL, new KeyCallable<Boolean>(key) {
+            public Boolean execute() {
+                try {
+                	monitorMachineStats(hostId, ip);
+                    return true;
+                } catch (Exception e) {
+                    logger.error(e.getMessage(), e);
+                    return false;
+                }
+            }
+        });
+    }
 
     /**
      * 监控机器的状态
@@ -282,13 +329,43 @@ public class MachineCenterImpl implements MachineCenter {
         try {
             // 执行shell命令，有的是后台执行命令，没有返回值; 如果端口被占用，表示启动成功；
             SSHUtil.execute(ip, shell);
-            success = SSHUtil.isPortUsed(ip, port);
+            success = isPortUsed(ip, port);
         } catch (SSHException e) {
             logger.error("execute shell command error, ip: {}, port: {}, shell: {}", ip, port, shell);
             logger.error(e.getMessage(), e);
         }
-
         return success;
+    }
+    
+    /**
+     * 多次验证是否进程已经启动
+     * @param ip
+     * @param port
+     * @return
+     */
+    private boolean isPortUsed(final String ip, final int port) {
+        boolean isPortUsed = new IdempotentConfirmer() {
+            private int sleepTime = 100;
+            
+            @Override
+            public boolean execute() {
+                try {
+                    boolean success = SSHUtil.isPortUsed(ip, port);
+                    if (!success) {
+                        TimeUnit.MILLISECONDS.sleep(sleepTime);
+                        sleepTime += 100;
+                    }
+                    return success;
+                } catch (SSHException e) {
+                    logger.error(e.getMessage(), e);
+                    return false;
+                } catch (InterruptedException e) {
+                    logger.error(e.getMessage(), e);
+                    return false;
+                }
+            }
+        }.run();
+        return isPortUsed;
     }
 
     /**
@@ -308,6 +385,7 @@ public class MachineCenterImpl implements MachineCenter {
             result = SSHUtil.execute(ip, shell);
         } catch (SSHException e) {
             logger.error("execute shell: {} at ip: {} error.", shell, ip, e);
+            result = ConstUtils.INNER_ERROR;
         }
 
         return result;
@@ -422,6 +500,11 @@ public class MachineCenterImpl implements MachineCenter {
         List<MachineStats> list = machineStatsDao.getAllMachineStats();
         for (MachineStats ms : list) {
             String ip = ms.getIp();
+            MachineInfo machineInfo = machineDao.getMachineInfoByIp(ip);
+            if (machineInfo == null || machineInfo.isOffline()) {
+                continue;
+            }
+            
             int memoryHost = instanceDao.getMemoryByHost(ip);
             getMachineMemoryDetail(ms.getIp());
 
@@ -441,7 +524,7 @@ public class MachineCenterImpl implements MachineCenter {
             
 
             ms.setMemoryAllocated(memoryHost);
-            ms.setInfo(machineDao.getMachineInfoByIp(ip));
+            ms.setInfo(machineInfo);
         }
         return list;
     }
@@ -527,7 +610,7 @@ public class MachineCenterImpl implements MachineCenter {
         int port = instanceInfo.getPort();
         int type = instanceInfo.getType();
         String logType = "";
-        if (TypeUtil.isRedisCluster(type) || TypeUtil.isRedisDataType(type)) {
+        if (TypeUtil.isRedisDataType(type)) {
             logType = "redis-";
         } else if (TypeUtil.isRedisSentinel(type)) {
             logType = "redis-sentinel-";
@@ -545,9 +628,9 @@ public class MachineCenterImpl implements MachineCenter {
     }
     
     @Override
-    public List<MachineInfo> getMachineInfoByType(MachineTypeEnum machineTypeEnum) {
+    public List<MachineInfo> getMachineInfoByType(TypeEnum typeEnum) {
         try {
-            return machineDao.getMachineInfoByType(machineTypeEnum.getType());
+            return machineDao.getMachineInfoByType(typeEnum.getType());
         } catch (Exception e) {
             logger.error(e.getMessage(), e);
             return Collections.emptyList();
@@ -589,6 +672,52 @@ public class MachineCenterImpl implements MachineCenter {
     public void setInstanceStatsCenter(InstanceStatsCenter instanceStatsCenter) {
         this.instanceStatsCenter = instanceStatsCenter;
     }
+
+	@Override
+	public boolean deployServerCollection(long hostId, String ip) {
+        Assert.hasText(ip);
+        Map<String, Object> dataMap = new HashMap<String, Object>();
+        dataMap.put(ConstUtils.HOST_KEY, ip);
+        JobKey jobKey = JobKey.jobKey(ConstUtils.SERVER_JOB_NAME, ConstUtils.SERVER_JOB_GROUP);
+        TriggerKey triggerKey = TriggerKey.triggerKey(ip, ConstUtils.SERVER_TRIGGER_GROUP + ip);
+        boolean result = schedulerCenter.deployJobByCron(jobKey, triggerKey, dataMap, ScheduleUtil.getFiveMinuteCronByHostId(hostId), false);
+
+        return result;
+	}
+
+	@Override
+	public boolean unDeployServerCollection(long hostId, String ip) {
+        Assert.hasText(ip);
+        TriggerKey collectionTriggerKey = TriggerKey.triggerKey(ip, ConstUtils.SERVER_TRIGGER_GROUP + ip);
+        Trigger trigger = schedulerCenter.getTrigger(collectionTriggerKey);
+        if (trigger == null) {
+            return true;
+        }
+        return schedulerCenter.unscheduleJob(collectionTriggerKey);
+	}
+	
+	@Override
+    public Map<String, Integer> getMachineInstanceCountMap() {
+	    List<Map<String,Object>> mapList = instanceDao.getMachineInstanceCountMap();
+	    if (CollectionUtils.isEmpty(mapList)) {
+	        return Collections.emptyMap();
+	    }
+	    
+	    Map<String, Integer> resultMap = new HashMap<String, Integer>();
+	    for(Map<String,Object> map : mapList) {
+	        String ip = MapUtils.getString(map, "ip", "");
+	        if (StringUtils.isBlank(ip)) {
+	            continue;
+	        }
+	        int count = MapUtils.getIntValue(map, "count");
+	        resultMap.put(ip, count);
+	    }
+        return resultMap;
+    }
+
+	public void setAsyncService(AsyncService asyncService) {
+		this.asyncService = asyncService;
+	}
 
     
     

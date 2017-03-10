@@ -3,7 +3,7 @@ package com.sohu.cache.entity;
 
 import java.util.Date;
 
-import com.sohu.cache.util.ConstUtils;
+import com.sohu.cache.constant.MachineInfoEnum;
 
 /**
  * 机器的属性信息
@@ -19,12 +19,12 @@ public class MachineInfo {
     /**
      * ssh用户名
      */
-    private String sshUser= ConstUtils.USERNAME;
+    private String sshUser;
     
     /**
      * ssh密码
      */
-    private String sshPasswd=ConstUtils.PASSWORD;
+    private String sshPasswd;
     
     /**
      * ip地址
@@ -77,12 +77,12 @@ public class MachineInfo {
     private int warn;
     
     /**
-     * 是否可用，0否，1是
+     * 是否可用，MachineInfoEnum.AvailableEnum
      */
     private int available;
     
     /**
-     * 机器资源的类型，0表示我们提供的原生资源，其它整数对应外部应用提供的机器资源池
+     * 机器类型：详见MachineInfoEnum.TypeEnum
      */
     private int type;           
     
@@ -95,6 +95,11 @@ public class MachineInfo {
      * 额外说明:(例如本机器有其他web或者其他服务)
      */
     private String extraDesc;
+    
+    /**
+     * 是否收集服务器信息，0否，1是
+     */
+    private int collect;
 
     public long getId() {
         return id;
@@ -103,8 +108,16 @@ public class MachineInfo {
     public void setId(long id) {
         this.id = id;
     }
+    
+    public int getCollect() {
+		return collect;
+	}
 
-    public String getSshUser() {
+	public void setCollect(int collect) {
+		this.collect = collect;
+	}
+
+	public String getSshUser() {
         return sshUser;
     }
 
@@ -252,6 +265,15 @@ public class MachineInfo {
                 ", type=" + type +
                 ", groupId=" + groupId +
                 ", extraDesc=" + extraDesc +
+                ", collect=" + collect +
                 '}';
+    }
+
+    /**
+     * 判断机器是否已经下线
+     * @return
+     */
+    public boolean isOffline() {
+        return MachineInfoEnum.AvailableEnum.NO.getValue() == this.available;
     }
 }

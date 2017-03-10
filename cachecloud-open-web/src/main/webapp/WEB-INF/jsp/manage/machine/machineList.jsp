@@ -44,10 +44,12 @@
 									<th>CPU使用率</th>
 									<th>网络流量</th>
 									<th>机器负载</th>
+									<th>核数/实例数</th>
 									<th>最后统计时间</th>
 									<th>是否虚机</th>
 									<th>机房</th>
 									<th>额外说明</th>
+									<th>状态收集</th>
                                     <th>操作</th>
 								</tr>
 							</thead>
@@ -60,7 +62,7 @@
 										<td>
 											<c:choose>
 												<c:when test="${machine.memoryUsageRatio == null || machine.memoryUsageRatio == ''}">
-													收集中..
+													收集中..${collectAlert}
 												</c:when>
 												<c:otherwise>
 													<span style="display:none"><fmt:formatNumber value="${machine.memoryUsageRatio / 100}" pattern="0.00"/></span>
@@ -91,7 +93,7 @@
                                         <td>
                                         <c:choose>
 											<c:when test="${machine.memoryUsageRatio == null || machine.memoryUsageRatio == ''}">
-												收集中..
+												收集中..${collectAlert}
 											</c:when>
 											<c:otherwise>
 												<fmt:formatNumber var="fmtMemoryAllocatedRatio" value="${((machine.memoryAllocated)/1024)*100.0/(machine.memoryTotal/1024/1024/1024)}" pattern="0.00"/>
@@ -121,7 +123,7 @@
 										<td>
 											<c:choose>
 												<c:when test="${machine.cpuUsage == null || machine.cpuUsage == ''}">
-													收集中..
+													收集中..${collectAlert}
 												</c:when>
 												<c:otherwise>
 													${machine.cpuUsage}
@@ -134,12 +136,34 @@
 										<td>
 											<c:choose>
 												<c:when test="${machine.load == null || machine.load == ''}">
-													收集中..
+													收集中..${collectAlert}
 												</c:when>
 												<c:otherwise>
 													${machine.load}
 												</c:otherwise>
 											</c:choose>
+										</td>
+										<td>
+											<fmt:formatNumber var="fmtInstanceCpuRatio" value="${machineInstanceCountMap[machine.info.ip] * 100.0 /machine.info.cpu}" pattern="0.00"/>
+	                                        	<span style="display:none"><fmt:formatNumber value="${fmtInstanceCpuRatio / 100}" pattern="0.00"/></span>
+	                                            <div class="progress margin-custom-bottom0">
+	                                            	<c:choose>
+						                        		<c:when test="${fmtInstanceCpuRatio >= 80.00}">
+															<c:set var="instanceCpuProgressBarStatus" value="progress-bar-danger"/>
+						                        		</c:when>
+						                        		<c:otherwise>
+															<c:set var="instanceCpuProgressBarStatus" value="progress-bar-success"/>
+						                        		</c:otherwise>
+						                        	</c:choose>
+	                                                    <div class="progress-bar ${instanceCpuProgressBarStatus}"
+	                                                         role="progressbar" aria-valuenow="${fmtInstanceCpuRatio}" aria-valuemax="100"
+	                                                         aria-valuemin="0" style="width: ${fmtInstanceCpuRatio}%">
+	                                                        <label style="color: #000000">
+	                                                            <fmt:formatNumber value="${machineInstanceCountMap[machine.info.ip]}"/>&nbsp;&nbsp;实例/
+	                                                            <fmt:formatNumber value="${machine.info.cpu}"/>&nbsp;&nbsp;核
+	                                                        </label>
+	                                                    </div>
+	                                                </div>
 										</td>
 										<td><fmt:formatDate value="${machine.modifyTime}" type="time" timeStyle="full" pattern="yyyy-MM-dd HH:mm"/></td>
                                         <th>
@@ -155,11 +179,29 @@
                                         	</c:choose>
                                         </th>
 										<th>${machine.info.room}</th>
-										<th>${machine.info.extraDesc}</th>
+										<th>
+										${machine.info.extraDesc}
+										<c:if test="${machine.info.type == 2}">
+											<font color='red'>(迁移工具机器)</font>
+										</c:if>
+										</th>
+                                       	<c:choose>
+                                       		<c:when test="${machine.info.collect == 1}">
+                                       			<td>开启</td>
+                                       		</c:when>
+                                       		<c:otherwise>
+                                       			<th>关闭</th>
+                                       		</c:otherwise>
+                                       	</c:choose>
                                         <td>
-                                            <a href="javascript;" data-target="#addMachineModal${machine.info.id}" data-toggle="modal">[修改]</a>
+                                        	<a href="/server/index.do?ip=${machine.info.ip}" class="btn btn-info" target="_blank">监控</a>
+                                        	&nbsp;
+                                            <a href="javascript;" data-target="#addMachineModal${machine.info.id}" class="btn btn-info" data-toggle="modal">修改</a>
                                             &nbsp;
-                                            <a onclick="if(window.confirm('确认要删除ip=${machine.info.ip}的机器吗?!')){return true;}else{return false;}" href="/manage/machine/delete.do?machineIp=${machine.info.ip}">[删除]</a>
+                                            
+                                            <button id="removeMachineBtn${machine.info.id}" onclick="removeMachine(this.id,'${machine.info.ip}')" type="button" class="btn btn-info">删除</button>               
+                                            
+                                            
                                         </td>
 									</tr>
 								</c:forEach>

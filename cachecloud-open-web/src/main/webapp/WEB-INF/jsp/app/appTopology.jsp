@@ -3,7 +3,7 @@
 
 <div class="row">
     <div class="page-header">
-        <h4>应用拓扑结构-${appDesc.type}-<a href="/admin/app/index.do?appId=${appDesc.appId}">${appDesc.name}</a></h4>
+        <h4>应用拓扑结构-<a href="/admin/app/index.do?appId=${appDesc.appId}">${appDesc.name}</a></h4>
     </div>
     <div style="margin-top: 20px">
         <table class="table table-bordered table-striped table-hover">
@@ -16,6 +16,7 @@
                 <td>对象数</td>
                 <td>连接数</td>
                 <td>命中率</td>
+                <td>碎片率</td>
                 <td>角色</td>
                 <td>主实例ID</td>
             </tr>
@@ -24,9 +25,13 @@
             <c:forEach var="instance" items="${instanceList}" varStatus="status">
             	<c:set var="instanceStatsMapKey" value="${instance.ip}:${instance.port}"></c:set>
                 <tr>
-                    <td><a href="/admin/instance/index.do?instanceId=${instance.id}" target="_blank">${instance.id}</a>
+                    <td>
+                    	 <a href="/admin/instance/index.do?instanceId=${instance.id}" target="_blank">${instance.id}</a>
+                    	 <c:if test="${instance.masterInstanceId == 0 && instance.status != 2}">
+							<span class="glyphicon glyphicon-star"></span>	                         
+	                     </c:if>
                     </td>
-                    <td>${instance.ip}:${instance.port}</td>
+                    <td><a href="/server/index.do?ip=${instance.ip}" target="_blank">${instance.ip}</a>:${instance.port}</td>
                     <td>${instance.statusDesc}</td>
 					<td>
 						<c:choose>
@@ -57,6 +62,21 @@
                   </td>
                   <td>${(instanceStatsMap[instanceStatsMapKey]).currConnections}</td>
                   <td>${(instanceStatsMap[instanceStatsMapKey]).hitPercent}</td>
+                  <td>
+	                  <c:set var="memFragmentationRatio" value="${(instanceStatsMap[instanceStatsMapKey]).memFragmentationRatio}"/>
+	                  <c:choose>
+	                		<c:when test="${memFragmentationRatio > 5 && (instanceStatsMap[instanceStatsMapKey]).usedMemory > 1024 * 1024 * 100}">
+	                			  <c:set var="memFragmentationRatioLabel" value="label-danger"/>
+	                		</c:when>
+	                		<c:when test="${memFragmentationRatio >= 3 && memFragmentationRatio < 5 && (instanceStatsMap[instanceStatsMapKey]).usedMemory > 1024 * 1024 * 100}">
+	                			  <c:set var="memFragmentationRatioLabel" value="label-warning"/>
+	                		</c:when>
+	                		<c:otherwise>
+	                			  <c:set var="memFragmentationRatioLabel" value="label-success"/>
+	                 		</c:otherwise>
+	                  </c:choose>
+	                  <label class="label ${memFragmentationRatioLabel}">${memFragmentationRatio}</label>
+                  </td>
                   <td>${instance.roleDesc}</td>
                   <c:choose>
                      <c:when test="${instance.masterInstanceId >0}">

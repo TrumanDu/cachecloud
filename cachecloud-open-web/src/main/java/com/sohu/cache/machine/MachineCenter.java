@@ -1,13 +1,13 @@
 package com.sohu.cache.machine;
 
-import com.sohu.cache.constant.MachineTypeEnum;
+import java.util.List;
+import java.util.Map;
+
+import com.sohu.cache.constant.MachineInfoEnum.TypeEnum;
 import com.sohu.cache.entity.InstanceInfo;
 import com.sohu.cache.entity.InstanceStats;
 import com.sohu.cache.entity.MachineInfo;
 import com.sohu.cache.entity.MachineStats;
-
-import java.util.List;
-import java.util.Map;
 
 /**
  * 基于host的操作
@@ -45,6 +45,15 @@ public interface MachineCenter {
      * @return              机器的信息
      */
     public Map<String, Object> collectMachineInfo(final long hostId, final long collectTime, final String ip);
+    
+    /**
+     * 异步收集host的状态信息
+     *
+     * @param hostId        机器id
+     * @param collectTime   收集时间
+     * @param ip            ip
+     */
+    public void asyncCollectMachineInfo(final long hostId, final long collectTime, final String ip);
 
     /**
      * 为当前机器的监控删除trigger
@@ -72,6 +81,15 @@ public interface MachineCenter {
      * @return
      */
     public void monitorMachineStats(final long hostId, final String ip);
+    
+    /**
+     * 异步监控机器的状态信息，向上层汇报或者报警
+     *
+     * @param hostId    机器id
+     * @param ip        ip
+     * @return
+     */
+    public void asyncMonitorMachineStats(final long hostId, final String ip);
 
     /**
      * 在主机ip上的端口port上启动一个进程，并check是否启动成功；
@@ -159,9 +177,32 @@ public interface MachineCenter {
 
     /**
      * 根据机器类型获取机器列表
-     * @param machineTypeEnum
+     * @param typeEnum
      * @return
      */
-    List<MachineInfo> getMachineInfoByType(MachineTypeEnum machineTypeEnum);
+    List<MachineInfo> getMachineInfoByType(TypeEnum typeEnum);
+    
+    /**
+     * 为当前ip创建trigger，并部署
+     *
+     * @param hostId    机器id
+     * @param ip        ip
+     * @return          是否部署成功
+     */
+    public boolean deployServerCollection(long hostId, String ip);
+    
+    /**
+     * 为当前服务器状态收集删除trigger
+     * @param hostId    机器id
+     * @param ip    ip
+     * @return      取消部署成功返回true， 否则返回false
+     */
+    public boolean unDeployServerCollection(final long hostId, final String ip);
+
+    /**
+     * 获取机器下实例数map
+     * @return
+     */
+    public Map<String, Integer> getMachineInstanceCountMap();
     
 }

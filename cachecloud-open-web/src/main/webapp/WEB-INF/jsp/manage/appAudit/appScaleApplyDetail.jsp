@@ -47,14 +47,15 @@
                                                 <div class="col-md-offset-3 col-md-3">
                                                     <button type="submit" class="btn green">
                                                         <i class="fa fa-check"></i>
-                                                       	 保存
+                                                       	 确认
                                                     </button>
 
                                                 </div>
-                                                <div class="col-md-6 ">
-                                                    <a class="btn btn-info"
-                                                       href="/manage/app/initHorizontalScaleApply?appAuditId=${appAuditId}">水平扩容</a>
-                                                </div>
+                                                <c:if test="${appDesc.type == 2}">
+                                                	<div class="col-md-6 ">
+	                                                    <a class="btn btn-info" href="/manage/app/initHorizontalScaleApply?appAuditId=${appAuditId}">水平扩容</a>
+	                                                </div>
+                                                </c:if>
                                             </div>
                                         </div>
                                     </div>

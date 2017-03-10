@@ -153,14 +153,6 @@ public interface AppService {
     AppAudit getAppAuditById(Long appAuditId);
 
     /**
-     * 更新应用的内存报警阀值
-     * @param appId
-     * @param memAlertValue
-     * @param userInfo
-     */
-    SuccessEnum updateMemAlertValue(Long appId, Integer memAlertValue, AppUser userInfo);
-
-    /**
      * 驳回理由
      * @param appAudit
      * @param userInfo
@@ -201,5 +193,20 @@ public interface AppService {
      */
     List<AppDesc> getAllAppDesc();
 
+    /**
+     * 修改报警配置
+     * @param appId
+     * @param memAlertValue
+     * @param clientConnAlertValue
+     * @param appUser
+     * @return
+     */
+    SuccessEnum changeAppAlertConfig(long appId, int memAlertValue, int clientConnAlertValue, AppUser appUser);
+
+    /**
+     * 更新appKey
+     * @param appId
+     */
+    void updateAppKey(long appId);
     
 }

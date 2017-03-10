@@ -29,6 +29,7 @@
             <mvc:mapping path="/admin/app/*"/>
             <mvc:mapping path="/admin/instance/*"/>
             <mvc:mapping path="/client/show/*"/>
+            <mvc:mapping path="/server/*"/>
             <bean class="com.sohu.cache.interceptor.FrontUserLoginInterceptor"/>
         </mvc:interceptor>
         <!-- 后台管理员验证 -->
@@ -43,6 +44,8 @@
             <mvc:mapping path="/import/app/*"/>
             <mvc:mapping path="/manage/config/*"/>
             <mvc:mapping path="/data/migrate/*"/>
+            <mvc:mapping path="/manage/redisConfig/*"/>
+            <mvc:mapping path="/manage/instanceAlert/*"/>
             <bean class="com.sohu.cache.interceptor.ManageUserLoginInterceptor"/>
         </mvc:interceptor>
         <!-- 应用和实例权限验证 -->

@@ -869,14 +869,19 @@ insert into system_config(config_key,config_value,info,status,order_id) values('
 insert into system_config(config_key,config_value,info,status,order_id) values('cachecloud.error.client','0.0','不可用客户端版本(用逗号隔开)',1,17);
 
 insert into system_config(config_key,config_value,info,status,order_id) values('redis.migrate.tool.home','/opt/cachecloud/redis-migrate-tool/','redis-migrate-tool安装路径',1,18);
-insert into system_config(config_key,config_value,info,status,order_id) values('cachecloud.user.login.type','1','用户登录状态保存方式(1:session,2:cookie，重启后生效)',1,19);
-insert into system_config(config_key,config_value,info,status,order_id) values('cachecloud.cookie.domain','none','cookie登录方式所需要的域名',1,20);
+insert into system_config(config_key,config_value,info,status,order_id) values('cachecloud.user.login.type','1','用户登录状态保存方式(session或cookie)',1,19);
+insert into system_config(config_key,config_value,info,status,order_id) values('cachecloud.cookie.domain','','cookie登录方式所需要的域名',1,20);
 insert into system_config(config_key,config_value,info,status,order_id) values('cachecloud.base.dir','/opt','cachecloud根目录，要和cachecloud-init.sh脚本中的目录一致',1,21);
 insert into system_config(config_key,config_value,info,status,order_id) values('cachecloud.app.client.conn.threshold','2000','应用连接数报警阀值',1,22);
 
-insert into system_config(config_key,config_value,info,status,order_id) values('cachecloud.email.alert.interface','none','邮件报警接口(说明:http://cachecloud.github.io 邮件和短信报警接口规范)',1,23);
-insert into system_config(config_key,config_value,info,status,order_id) values('cachecloud.mobile.alert.interface','none','短信报警接口(说明:http://cachecloud.github.io 邮件和短信报警接口规范)',1,24);
-insert into system_config(config_key,config_value,info,status,order_id) values('cachecloud.ldap.url','none','LDAP接口地址(例如:ldap://ldap.xx.com)',1,25);
+insert into system_config(config_key,config_value,info,status,order_id) values('cachecloud.email.alert.interface','','邮件报警接口(说明:http://cachecloud.github.io 邮件和短信报警接口规范)',1,23);
+insert into system_config(config_key,config_value,info,status,order_id) values('cachecloud.mobile.alert.interface','','短信报警接口(说明:http://cachecloud.github.io 邮件和短信报警接口规范)',1,24);
+insert into system_config(config_key,config_value,info,status,order_id) values('cachecloud.ldap.url','','LDAP接口地址(例如:ldap://ldap.xx.com)',1,25);
+
+insert into system_config(config_key,config_value,info,status,order_id) values('cachecloud.whether.schedule.clean.data','false','是否定期清理统计数据',1,26);
+
+insert into system_config(config_key,config_value,info,status,order_id) values('cachecloud.app.secret.base.key','cachecloud-2014','appkey秘钥基准key',1,27);
+insert into system_config(config_key,config_value,info,status,order_id) values('cachecloud.machine.stats.cron.minute','1','机器性能统计周期(分钟)',1,28);
 
 
 CREATE TABLE `app_data_migrate_status` (
@@ -900,6 +905,97 @@ CREATE TABLE `app_data_migrate_status` (
 
 insert into app_user(name,ch_name,email,mobile,type) values('admin','admin','admin@sohu-inc.com','13500000000',0);
 
+
+CREATE TABLE `instance_config` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `config_key` varchar(128) NOT NULL COMMENT '配置名',
+  `config_value` varchar(512) NOT NULL COMMENT '配置值',
+  `info` varchar(512) NOT NULL COMMENT '配置说明',
+  `update_time` datetime NOT NULL COMMENT '更新时间',
+  `type` mediumint(9) NOT NULL COMMENT '类型：2.cluster节点特殊配置, 5:sentinel节点配置, 6:redis普通节点',
+  status tinyint not null comment '1有效,0无效',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `config_key_type` (`config_key`,`type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('cluster-enabled','yes','是否开启集群模式',now(),2,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('cluster-node-timeout','15000','集群节点超时时间,默认15秒',now(),2,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('cluster-slave-validity-factor','10','从节点延迟有效性判断因子,默认10秒',now(),2,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('cluster-migration-barrier','1','主从迁移至少需要的从节点数,默认1个',now(),2,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('cluster-config-file','nodes-%d.conf','集群配置文件名称,格式:nodes-{port}.conf',now(),2,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('cluster-require-full-coverage','no','节点部分失败期间,其他节点是否继续工作',now(),2,1);
+
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('port','%d','sentinel实例端口',now(),5,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('dir','%s','工作目录',now(),5,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('sentinel monitor','%s %s %d 1','master名称定义和最少参与监控的sentinel数,格式:masterName ip port num',now(),5,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('sentinel down-after-milliseconds','%s 20000','Sentinel判定服务器断线的毫秒数',now(),5,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('sentinel failover-timeout','%s 180000','故障迁移超时时间,默认:3分钟',now(),5,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('sentinel parallel-syncs','%s 1','在执行故障转移时,最多有多少个从服务器同时对新的主服务器进行同步,默认:1',now(),5,1);
+
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('daemonize','no','是否守护进程',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('tcp-backlog','511','TCP连接完成队列',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('timeout','0','客户端闲置多少秒后关闭连接,默认为0,永不关闭',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('tcp-keepalive','60','检测客户端是否健康周期,默认关闭',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('loglevel','notice','日志级别',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('databases','16','可用的数据库数，默认值为16个,默认数据库为0',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('dir','%s','redis工作目录',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('stop-writes-on-bgsave-error','no','bgsave出错了不停写',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('repl-timeout','60','master批量数据传输时间或者ping回复时间间隔,默认:60秒',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('repl-ping-slave-period','10','指定slave定期ping master的周期,默认:10秒',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('repl-disable-tcp-nodelay','no','是否禁用socket的NO_DELAY,默认关闭，影响主从延迟',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('repl-backlog-size','10M','复制缓存区,默认:1mb,配置为:10Mb',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('repl-backlog-ttl','7200','master在没有Slave的情况下释放BACKLOG的时间多久:默认:3600,配置为:7200',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('slave-serve-stale-data','yes','当slave服务器和master服务器失去连接后，或者当数据正在复制传输的时候，如果此参数值设置“yes”，slave服务器可以继续接受客户端的请求',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('slave-read-only','yes','slave服务器节点是否只读,cluster的slave节点默认读写都不可用,需要调用readonly开启可读模式',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('slave-priority','100','slave的优先级,影响sentinel/cluster晋升master操作,0永远不晋升',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('lua-time-limit','5000','Lua脚本最长的执行时间，单位为毫秒',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('slowlog-log-slower-than','10000','慢查询被记录的阀值,默认10毫秒',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('slowlog-max-len','128','最多记录慢查询的条数',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('hash-max-ziplist-entries','512','hash数据结构优化参数',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('hash-max-ziplist-value','64','hash数据结构优化参数',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('list-max-ziplist-entries','512','list数据结构优化参数',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('list-max-ziplist-value','64','list数据结构优化参数',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('set-max-intset-entries','512','set数据结构优化参数',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('zset-max-ziplist-entries','128','zset数据结构优化参数',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('zset-max-ziplist-value','64','zset数据结构优化参数',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('activerehashing','yes','是否激活重置哈希,默认:yes',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('client-output-buffer-limit normal','0 0 0','客户端输出缓冲区限制(客户端)',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('client-output-buffer-limit slave','512mb 128mb 60','客户端输出缓冲区限制(复制)',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('client-output-buffer-limit pubsub','32mb 8mb 60','客户端输出缓冲区限制(发布订阅)',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('hz','10','执行后台task数量,默认:10',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('port','%d','端口',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('maxmemory','%dmb','当前实例最大可用内存',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('maxmemory-policy','volatile-lru','内存不够时,淘汰策略,默认:volatile-lru',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('appendonly','yes','开启append only持久化模式',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('appendfsync','everysec','默认:aof每秒同步一次',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('appendfilename','appendonly-%d.aof','aof文件名称,默认:appendonly-{port}.aof',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('dbfilename','dump-%d.rdb','RDB文件默认名称,默认dump-{port}.rdb',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('aof-rewrite-incremental-fsync','yes','aof rewrite过程中,是否采取增量文件同步策略,默认:yes',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('no-appendfsync-on-rewrite','yes','是否在后台aof文件rewrite期间调用fsync,默认调用,修改为yes,防止可能fsync阻塞,但可能丢失rewrite期间的数据',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('auto-aof-rewrite-min-size','64m','触发rewrite的aof文件最小阀值,默认64m',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('auto-aof-rewrite-percentage','%d','Redis重写aof文件的比例条件,默认从100开始,统一机器下不同实例按4%递减',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('rdbcompression','yes','rdb是否压缩',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('rdbchecksum','yes','rdb校验和',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('repl-diskless-sync','no','开启无盘复制',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('repl-diskless-sync-delay','5','无盘复制延时',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('save 900','1','900秒有一次修改做bgsave',now(),6,0);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('save 300','10','300秒有10次修改做bgsave',now(),6,0);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('save 60','10000','60秒有10000次修改做bgsave',now(),6,0);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('maxclients','10000','客户端最大连接数',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('hll-sparse-max-bytes','3000','HyperLogLog稀疏表示限制设置	',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('min-slaves-to-write','0','当slave数量小于min-slaves-to-write，且延迟小于等于min-slaves-max-lag时， master停止写入操作',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('min-slaves-max-lag','10','当slave服务器和master服务器失去连接后，或者当数据正在复制传输的时候，如果此参数值设置yes，slave服务器可以继续接受客户端的请求',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('aof-load-truncated','yes','加载aof文件时，是否忽略aof文件不完整的情况，是否Redis正常启动',now(),6,1);
+insert into instance_config(config_key,config_value,info,update_time, type, status) values('notify-keyspace-events','','keyspace事件通知功能',now(),6,1);
+
+-- change appdesc add 秘钥和客户端连接数报警
+alter table app_desc add column client_conn_alert_value int(11) DEFAULT 2000 COMMENT '客户端连接报警阀值';
+alter table app_desc add column app_key varchar(255) DEFAULT NULL COMMENT '应用秘钥';
+
+alter table instance_statistics add column mem_fragmentation_ratio double default 0 COMMENT '碎片率';
+alter table instance_statistics add column aof_delayed_fsync int default 0 COMMENT 'aof阻塞次数';
+
+update machine_info set available=1;
+
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
@@ -912,3 +1008,69 @@ insert into app_user(name,ch_name,email,mobile,type) values('admin','admin','adm
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 -- Dump completed on 2016-01-13  9:28:31
+
+-- add column for the switch of server status collection
+ALTER TABLE `machine_info` ADD COLUMN `collect` int DEFAULT 1 COMMENT 'switch of collect server status, 1:open, 0:close';
+
+-- add server status table
+DROP TABLE IF EXISTS `server`;
+CREATE TABLE `server` (
+  `ip` varchar(16) NOT NULL COMMENT 'ip',
+  `host` varchar(255) DEFAULT NULL COMMENT 'host',
+  `nmon` varchar(255) DEFAULT NULL COMMENT 'nmon version',
+  `cpus` tinyint(4) DEFAULT NULL COMMENT 'logic cpu num',
+  `cpu_model` varchar(255) DEFAULT NULL COMMENT 'cpu 型号',
+  `dist` varchar(255) DEFAULT NULL COMMENT '发行版信息',
+  `kernel` varchar(255) DEFAULT NULL COMMENT '内核信息',
+  `ulimit` varchar(255) DEFAULT NULL COMMENT 'ulimit -n,ulimit -u',
+  `updatetime` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`ip`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+DROP TABLE IF EXISTS `server_stat`;
+CREATE TABLE `server_stat` (
+  `ip` varchar(16) NOT NULL COMMENT 'ip',
+  `cdate` date NOT NULL COMMENT '数据收集天',
+  `ctime` char(4) NOT NULL COMMENT '数据收集小时分钟',
+  `cuser` float DEFAULT NULL COMMENT '用户态占比',
+  `csys` float DEFAULT NULL COMMENT '内核态占比',
+  `cwio` float DEFAULT NULL COMMENT 'wio占比',
+  `c_ext` text COMMENT '子cpu占比',
+  `cload1` float DEFAULT NULL COMMENT '1分钟load',
+  `cload5` float DEFAULT NULL COMMENT '5分钟load',
+  `cload15` float DEFAULT NULL COMMENT '15分钟load',
+  `mtotal` float DEFAULT NULL COMMENT '总内存,单位M',
+  `mfree` float DEFAULT NULL COMMENT '空闲内存',
+  `mcache` float DEFAULT NULL COMMENT 'cache',
+  `mbuffer` float DEFAULT NULL COMMENT 'buffer',
+  `mswap` float DEFAULT NULL COMMENT 'cache',
+  `mswap_free` float DEFAULT NULL COMMENT 'cache',
+  `nin` float DEFAULT NULL COMMENT '网络入流量 单位K/s',
+  `nout` float DEFAULT NULL COMMENT '网络出流量 单位k/s',
+  `nin_ext` text COMMENT '各网卡入流量详情',
+  `nout_ext` text COMMENT '各网卡出流量详情',
+  `tuse` int(11) DEFAULT NULL COMMENT 'tcp estab连接数',
+  `torphan` int(11) DEFAULT NULL COMMENT 'tcp orphan连接数',
+  `twait` int(11) DEFAULT NULL COMMENT 'tcp time wait连接数',
+  `dread` float DEFAULT NULL COMMENT '磁盘读速率 单位K/s',
+  `dwrite` float DEFAULT NULL COMMENT '磁盘写速率 单位K/s',
+  `diops` float DEFAULT NULL COMMENT '磁盘io速率 交互次数/s',
+  `dbusy` float DEFAULT NULL COMMENT '磁盘io带宽使用百分比',
+  `d_ext` text COMMENT '磁盘各分区占比',
+  `dspace` text COMMENT '磁盘各分区空间使用率',
+  PRIMARY KEY (`ip`,`cdate`,`ctime`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- 应用级别
+alter table app_desc add column important_level tinyint not null default 2 comment '应用级别，1:最重要，2:一般重要，3:一般'; 
+
+CREATE TABLE `instance_alert` (
+  `config_key` varchar(255) NOT NULL COMMENT '配置key',
+  `alert_value` varchar(512) NOT NULL COMMENT '报警阀值',
+  `info` varchar(255) NOT NULL COMMENT '配置说明',
+  `status` tinyint(4) NOT NULL COMMENT '1:可用,0:不可用',
+  `order_id` int(11) NOT NULL COMMENT '顺序',
+  `compare_type` tinyint(4) NOT NULL COMMENT '比较类型：-1小于,0等于,1大于',
+  `value_type` tinyint(4) NOT NULL DEFAULT '1' COMMENT '1固定值,2差值',
+  PRIMARY KEY (`config_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='实例报警阀值';

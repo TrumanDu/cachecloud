@@ -12,10 +12,8 @@ import com.sohu.cache.protocol.MachineProtocol;
 import com.sohu.cache.protocol.RedisProtocol;
 import com.sohu.cache.redis.RedisCenter;
 import com.sohu.cache.redis.RedisClusterNode;
+import com.sohu.cache.redis.RedisConfigTemplateService;
 import com.sohu.cache.redis.RedisDeployCenter;
-import com.sohu.cache.redis.enums.RedisClusterConfigEnum;
-import com.sohu.cache.redis.enums.RedisConfigEnum;
-import com.sohu.cache.redis.enums.RedisSentinelConfigEnum;
 import com.sohu.cache.util.ConstUtils;
 import com.sohu.cache.util.IdempotentConfirmer;
 import com.sohu.cache.util.TypeUtil;
@@ -49,6 +47,8 @@ public class RedisDeployCenterImpl implements RedisDeployCenter {
     private RedisCenter redisCenter;
 
     private AppDao appDao;
+    
+    private RedisConfigTemplateService redisConfigTemplateService;
 
     @Override
     public boolean deployClusterInstance(long appId, List<RedisClusterNode> clusterNodes, int maxMemory) {
@@ -386,12 +386,7 @@ public class RedisDeployCenterImpl implements RedisDeployCenter {
 
     @Override
     public boolean createRunNode(String host, Integer port, int maxMemory, boolean isCluster) {
-        boolean isRun = isRun(host, port);
-        if (isRun) {
-            return true;
-        }
-        boolean isCreate = runInstance(host, port, maxMemory, isCluster);
-        return isCreate;
+        return runInstance(host, port, maxMemory, isCluster);
     }
 
     private boolean runInstance(String host, Integer port, int maxMemory, boolean isCluster) {
@@ -417,10 +412,10 @@ public class RedisDeployCenterImpl implements RedisDeployCenter {
         }
         if (isCluster) {
             //删除cluster节点配置
-            String nodesFile = String.format("rm -rf %s/nodes-%s.conf", MachineProtocol.DATA_DIR, port);
-            boolean isDelete = machineCenter.startProcessAtPort(host, port, nodesFile);
-            if (isDelete) {
-                logger.warn("{} to {}:{}", nodesFile, host, port);
+            String deleteNodeShell = String.format("rm -rf %s/nodes-%s.conf", MachineProtocol.DATA_DIR, port);
+            String deleteNodeResult = machineCenter.executeShell(host, deleteNodeShell);
+            if (!ConstUtils.INNER_ERROR.equals(deleteNodeResult)) {
+                logger.warn("runDeleteNodeShell={} at host {}", deleteNodeShell, host);
             }
         }
         //启动实例
@@ -510,59 +505,48 @@ public class RedisDeployCenterImpl implements RedisDeployCenter {
      * @param maxMemory
      * @return
      */
-    private List<String> handleCommonConfig(int port, int maxMemory) {
-        List<String> configs = new ArrayList<String>();
-        for (RedisConfigEnum config : RedisConfigEnum.values()) {
-            if (RedisConfigEnum.MAXMEMORY.equals(config)) {
-                configs.add(config.getKey() + " " + maxMemory + "mb");
-            } else if (RedisConfigEnum.DBFILENAME.equals(config)
-                    || RedisConfigEnum.APPENDFILENAME.equals(config)) {
-                configs.add(config.getKey() + " " + String.format(config.getValue(), port));
-            } else if (RedisConfigEnum.PORT.equals(config)) {
-                configs.add(config.getKey() + " " + port);
-            } else if (RedisConfigEnum.AUTO_AOF_REWRITE_PERCENTAGE.equals(config)) {
-                //随机比例 auto-aof-rewrite-percentage
-                Random random = new Random();
-                configs.add(config.getKey() + " " + (69 + random.nextInt(30)));
-            } else {
-                configs.add(config.getKey() + " " + config.getValue());
-            }
+    public List<String> handleCommonConfig(int port, int maxMemory) {
+        List<String> configs = null;
+        try {
+            configs = redisConfigTemplateService.handleCommonConfig(port, maxMemory);
+        } catch (Exception e) {
+            logger.error(e.getMessage(), e);
+        }
+        if (CollectionUtils.isEmpty(configs)) {
+            configs = redisConfigTemplateService.handleCommonDefaultConfig(port, maxMemory);
         }
         return configs;
     }
 
     private List<String> handleSentinelConfig(String masterName, String host, int port, int sentinelPort) {
-        List<String> configs = new ArrayList<String>();
-        configs.add(RedisSentinelConfigEnum.PORT.getKey() + " " + sentinelPort);
-        configs.add(RedisSentinelConfigEnum.DIR.getKey() + " " + RedisSentinelConfigEnum.DIR.getValue());
-        String monitor = String.format("%s %s %d %d", masterName, host, port, 1);
-        configs.add(RedisSentinelConfigEnum.MONITOR.getKey() + " " + monitor);
-        configs.add(RedisSentinelConfigEnum.DOWN_AFTER_MILLISECONDS.getKey() + " " + String
-                .format(RedisSentinelConfigEnum.DOWN_AFTER_MILLISECONDS.getValue(), masterName));
-        configs.add(RedisSentinelConfigEnum.FAILOVER_TIMEOUT.getKey() + " " + String
-                .format(RedisSentinelConfigEnum.FAILOVER_TIMEOUT.getValue(), masterName));
-        configs.add(RedisSentinelConfigEnum.PARALLEL_SYNCS.getKey() + " " + String
-                .format(RedisSentinelConfigEnum.PARALLEL_SYNCS.getValue(), masterName));
+        List<String> configs = null;
+        try {
+            configs = redisConfigTemplateService.handleSentinelConfig(masterName, host, port, sentinelPort);
+        } catch (Exception e) {
+            logger.error(e.getMessage(), e);
+        }
+        if (CollectionUtils.isEmpty(configs)) {
+            configs = redisConfigTemplateService.handleSentinelDefaultConfig(masterName, host, port, sentinelPort);
+        }
+        return configs;
+    }
+
+    private List<String> handleClusterConfig(int port) {
+        List<String> configs = null;
+        try {
+            configs = redisConfigTemplateService.handleClusterConfig(port);
+        } catch (Exception e) {
+            logger.error(e.getMessage(), e);
+        }
+        if (CollectionUtils.isEmpty(configs)) {
+            configs = redisConfigTemplateService.handleClusterDefaultConfig(port);
+        }
         return configs;
     }
 
     private String getMasterName(String host, int port) {
         String masterSentinelName = String.format("sentinel-%s-%s", host, port);
         return masterSentinelName;
-    }
-
-    private List<String> handleClusterConfig(int port) {
-        List<String> configs = new ArrayList<String>();
-        for (RedisClusterConfigEnum config : RedisClusterConfigEnum.values()) {
-            if (config.equals(RedisClusterConfigEnum.CLUSTER_CONFIG_FILE)) {
-                configs.add(RedisClusterConfigEnum.CLUSTER_CONFIG_FILE.getKey() + " "
-                        + String.format(RedisClusterConfigEnum.CLUSTER_CONFIG_FILE.getValue(), port));
-            } else {
-                configs.add(config.getKey() + " "
-                        + config.getValue());
-            }
-        }
-        return configs;
     }
 
     private boolean isRun(String host, int port) {
@@ -869,7 +853,7 @@ public class RedisDeployCenterImpl implements RedisDeployCenter {
                     logger.error("{}:{} cluster is failed", slaveHost, slaveHost);
                     return isClusterMeet;
                 }
-                final String nodeId = getNodeId(masterJedis);
+                final String nodeId = redisCenter.getNodeId(masterHost, masterPort);
                 if (StringUtils.isBlank(nodeId)) {
                     logger.error("{}:{} getNodeId failed", masterHost, masterPort);
                     return false;
@@ -1013,36 +997,6 @@ public class RedisDeployCenterImpl implements RedisDeployCenter {
         return true;
     }
 
-    private String getNodeId(final Jedis jedis) {
-        try {
-            final StringBuilder clusterNodes = new StringBuilder();
-            boolean isGetNodes = new IdempotentConfirmer() {
-                @Override
-                public boolean execute() {
-                    String nodes = jedis.clusterNodes();
-                    if (nodes != null && nodes.length() > 0) {
-                        clusterNodes.append(nodes);
-                        return true;
-                    }
-                    return false;
-                }
-            }.run();
-            if (!isGetNodes) {
-                logger.error("{}:{} clusterNodes failed", jedis.getClient().getHost(), jedis.getClient().getPort());
-                return null;
-            }
-            for (String infoLine : clusterNodes.toString().split("\n")) {
-                if (infoLine.contains("myself")) {
-                    String nodeId = infoLine.split(" ")[0];
-                    return nodeId;
-                }
-            }
-        } catch (Exception e) {
-            logger.error(e.getMessage(), e);
-        }
-        return null;
-    }
-
     /**
      * 拷贝redis配置
      *
@@ -1112,4 +1066,7 @@ public class RedisDeployCenterImpl implements RedisDeployCenter {
         this.appDao = appDao;
     }
 
+    public void setRedisConfigTemplateService(RedisConfigTemplateService redisConfigTemplateService) {
+        this.redisConfigTemplateService = redisConfigTemplateService;
+    }
 }

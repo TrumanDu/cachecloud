@@ -2,24 +2,29 @@ package com.sohu.cache.web.controller;
 
 import com.sohu.cache.web.enums.RedisOperateEnum;
 import com.sohu.cache.constant.AppCheckEnum;
+import com.sohu.cache.constant.DataFormatCheckResult;
+import com.sohu.cache.constant.ErrorMessageEnum;
+import com.sohu.cache.constant.HorizontalResult;
 import com.sohu.cache.entity.*;
 import com.sohu.cache.machine.MachineCenter;
 import com.sohu.cache.redis.RedisCenter;
 import com.sohu.cache.redis.RedisDeployCenter;
 import com.sohu.cache.redis.ReshardProcess;
+import com.sohu.cache.stats.app.AppDailyDataCenter;
 import com.sohu.cache.stats.app.AppDeployCenter;
 import com.sohu.cache.stats.instance.InstanceDeployCenter;
 import com.sohu.cache.util.ConstUtils;
 import com.sohu.cache.util.TypeUtil;
 import com.sohu.cache.web.enums.SuccessEnum;
 import com.sohu.cache.web.util.AppEmailUtil;
+import com.sohu.cache.web.util.DateUtil;
 
 import net.sf.json.JSONArray;
 
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.math.NumberUtils;
+import org.apache.commons.lang.time.DateUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Controller;
@@ -31,6 +36,7 @@ import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import java.text.ParseException;
 import java.util.*;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentMap;
@@ -65,6 +71,38 @@ public class AppManageController extends BaseController {
 	@Resource(name = "instanceDeployCenter")
 	private InstanceDeployCenter instanceDeployCenter;
 
+	@Resource(name = "appDailyDataCenter")
+    private AppDailyDataCenter appDailyDataCenter;
+	
+	@RequestMapping("/appDaily")
+    public ModelAndView appDaily(HttpServletRequest request, HttpServletResponse response, Model model) throws ParseException {
+	    AppUser userInfo = getUserInfo(request);
+        logger.warn("user {} want to send appdaily", userInfo.getName());
+        if (ConstUtils.SUPER_MANAGER.contains(userInfo.getName())) {
+            Date startDate;
+            Date endDate;
+            String startDateParam = request.getParameter("startDate");
+            String endDateParam = request.getParameter("endDate");
+            if (StringUtils.isBlank(startDateParam) || StringUtils.isBlank(endDateParam)) {
+                endDate = new Date();
+                startDate = DateUtils.addDays(endDate, -1);
+            } else {
+                startDate = DateUtil.parseYYYY_MM_dd(startDateParam);
+                endDate = DateUtil.parseYYYY_MM_dd(endDateParam);
+            }
+            long appId = NumberUtils.toLong(request.getParameter("appId"));
+            if (appId > 0) {
+                appDailyDataCenter.sendAppDailyEmail(appId, startDate, endDate);
+            } else {
+                appDailyDataCenter.sendAppDailyEmail();
+            }
+            model.addAttribute("msg", "success!");
+        } else {
+            model.addAttribute("msg", "no power!");
+        }
+        return new ModelAndView("");
+    }
+	
 	/**
 	 * 审核列表
 	 * 
@@ -147,74 +185,66 @@ public class AppManageController extends BaseController {
 	 */
 	@RequestMapping(value = "/initHorizontalScaleApply")
 	public ModelAndView doInitHorizontalScaleApply(HttpServletRequest request, HttpServletResponse response, Model model, Long appAuditId) {
-		// 1. 审批
 		AppAudit appAudit = appService.getAppAuditById(appAuditId);
 		model.addAttribute("appAudit", appAudit);
 		model.addAttribute("appId", appAudit.getAppId());
-
-		// 2. 从实例列表中获取应用的机器列表
-		Set<String> appHostSet = new HashSet<String>();
-		List<InstanceInfo> instanceList = appService.getAppInstanceInfo(appAudit.getAppId());
-		for (InstanceInfo instanceInfo : instanceList) {
-			if (TypeUtil.isRedisSentinel(instanceInfo.getType())) {
-				continue;
-			}
-			appHostSet.add(instanceInfo.getIp());
-		}
-
-		// 3. 机器列表
-		List<MachineStats> machineList = machineCenter.getAllMachineStats();
-
-		// 4. 排序
-		machineList = sortByAppAndMachineTotalMem(appHostSet, machineList);
-
-		model.addAttribute("machineList", machineList);
-		model.addAttribute("appMachineSize", appHostSet.size());
-
 		return new ModelAndView("manage/appAudit/initHorizontalScaleApply");
 	}
+	
+	
 
-	/**
-	 * 添加分片
-	 * 
-	 * @return
-	 */
-	@RequestMapping(value = "/addAppClusterSharding")
-	public ModelAndView doAddAppClusterSharding(HttpServletRequest request,
+    /**
+     * 添加水平扩容节点
+     * 
+     * @return
+     */
+    @RequestMapping(value = "/addHorizontalNodes")
+    public ModelAndView doAddHorizontalNodes(HttpServletRequest request,
+            HttpServletResponse response, Model model, String masterSizeSlave,
+            Long appAuditId) {
+        AppUser appUser = getUserInfo(request);
+        logger.warn("user {} addHorizontalNodes:{}", appUser.getName(), masterSizeSlave);
+        boolean isAdd = false;
+        AppAudit appAudit = appService.getAppAuditById(appAuditId);
+        // 解析配置
+        String[] configArr = masterSizeSlave.split(ConstUtils.COLON);
+        String masterHost = configArr[0];
+        String memSize = configArr[1];
+        int memSizeInt = NumberUtils.toInt(memSize);
+        String slaveHost = null;
+        if (configArr.length >= 3) {
+            slaveHost = configArr[2];
+        }
+        try {
+            isAdd = appDeployCenter.addHorizontalNodes(appAudit.getAppId(), masterHost, slaveHost, memSizeInt);
+        } catch (Exception e) {
+            logger.error(e.getMessage(), e);
+        }
+        logger.warn("addAppClusterSharding:{}, result is {}", masterSizeSlave, isAdd);
+        model.addAttribute("status", isAdd ? 1 : 0);
+        return new ModelAndView("");
+    }
+
+    /**
+     * 检测水平扩容节点
+     * @param masterSizeSlave
+     * @param appAuditId
+     * @return
+     */
+	@RequestMapping(value = "/checkHorizontalNodes")
+	public ModelAndView doCheckHorizontalNodes(HttpServletRequest request,
 			HttpServletResponse response, Model model, String masterSizeSlave,
 			Long appAuditId) {
-	    AppUser appUser = getUserInfo(request);
-        logger.warn("user {} addAppClusterSharding:{}", appUser.getName(), masterSizeSlave);
-		boolean isAdd = false;
-		if (StringUtils.isNotBlank(masterSizeSlave) && appAuditId != null) {
-			AppAudit appAudit = appService.getAppAuditById(appAuditId);
-			// 解析配置
-			String[] configArr = masterSizeSlave.split(":");
-			if (configArr.length >= 2) {
-				String masterHost = configArr[0];
-				String memSize = configArr[1];
-				int memSizeInt = NumberUtils.toInt(memSize);
-				String slaveHost = null;
-				if (configArr.length >= 3) {
-					slaveHost = configArr[2];
-				}
-				if (memSizeInt > 0) {
-					try {
-						isAdd = appDeployCenter.addAppClusterSharding(appAudit.getAppId(), masterHost, slaveHost, memSizeInt);
-					} catch (Exception e) {
-						logger.error(e.getMessage(), e);
-					}
-				}
-			} else {
-				logger.error("addAppClusterSharding param size error, addAppClusterSharding:{}", masterSizeSlave);
-			}
-		}
-        logger.warn("addAppClusterSharding:{}, result is {}", masterSizeSlave, isAdd);
-		if (isAdd) {
-			return new ModelAndView("redirect:/manage/app/handleHorizontalScale?appAuditId=" + appAuditId);
-		} else {
-			return new ModelAndView("redirect:/manage/app/initHorizontalScaleApply?appAuditId=" + appAuditId);
-		}
+	    DataFormatCheckResult dataFormatCheckResult = null;
+        try {
+            dataFormatCheckResult = appDeployCenter.checkHorizontalNodes(appAuditId, masterSizeSlave);
+        } catch (Exception e) {
+            logger.error(e.getMessage(), e);
+            dataFormatCheckResult = DataFormatCheckResult.fail(ErrorMessageEnum.INNER_ERROR_MSG.getMessage());
+        }
+        model.addAttribute("status", dataFormatCheckResult.getStatus());
+        model.addAttribute("message", dataFormatCheckResult.getMessage());
+        return new ModelAndView("");
 	}
 
 	/**
@@ -275,60 +305,46 @@ public class AppManageController extends BaseController {
 	}
 
 	/**
-	 * 添加水平扩容配置
-	 * 
-	 * @param ip
-	 * @param port
-	 * @param appId
-	 * @param appAuditId
-	 */
-	@RequestMapping(value = "/addHorizontalScaleApply")
-	public ModelAndView doAddHorizontalScaleApply(HttpServletRequest request,
-			HttpServletResponse response, Model model, String ip, Integer port,
-			Long appId, Long appAuditId) {
-	    AppUser appUser = getUserInfo(request);
-        logger.warn("user {} horizontalScaleApply error param, ip:{}, port:{}, appId:{}", appUser.getName(), ip, port, appId);
-        boolean isSuccess = false;
-		if (appId != null && StringUtils.isNotBlank(ip) && port != null) {
-			try {
-			    isSuccess = appDeployCenter.horizontalExpansion(appId, ip, port, appAuditId);
-			} catch (Exception e) {
-				logger.error(e.getMessage(), e);
-			}
-		} else {
-			logger.error("horizontalScaleApply error param, ip:{}, port:{}, appId:{}", ip, port, appId);
-		}
-        logger.warn("user {} horizontalScaleApply error param, ip:{}, port:{}, appId:{}, result is {}", appUser.getName(), ip, port, appId, isSuccess);
-		return new ModelAndView("redirect:/manage/app/handleHorizontalScale?appAuditId=" + appAuditId);
-	}
-
-	/**
-	 * 下线分片
-	 * 
-	 * @param ip
-	 * @param port
-	 * @param appId
-	 * @param appAuditId
+	 * 水平扩容配置检查
+	 * @param sourceId 源实例ID
+	 * @param targetId 目标实例ID
+	 * @param startSlot 开始slot
+	 * @param endSlot 结束slot
+	 * @param appId 应用id
+	 * @param appAuditId 审批id
 	 * @return
 	 */
-	@RequestMapping(value = "/offLineHorizontalShard")
-	public ModelAndView doOffLineHorizontalShard(HttpServletRequest request,
-			HttpServletResponse response, Model model, String ip, Integer port,
-			Long appId, Long appAuditId) {
-	    AppUser appUser = getUserInfo(request);
-		logger.warn("offLineHorizontalShard: user:{},ip:{},port:{},appId:{},appAuditId:{}", appUser.getName(), ip, port, appId, appAuditId);
-		boolean isSuccess = false;
-		if (appId != null && StringUtils.isNotBlank(ip) && port != null) {
-			try {
-				appDeployCenter.offLineClusterNode(appId, ip, port);
-			} catch (Exception e) {
-				logger.error(e.getMessage(), e);
-			}
-		} else {
-			logger.error("offLineHorizontalShard error param, ip:{}, port:{}, appId:{}", ip, port, appId);
-		}
-	    logger.warn("offLineHorizontalShard: user:{},ip:{},port:{},appId:{},appAuditId:{},success is {}", appUser.getName(), ip, port, appId, appAuditId, isSuccess);
-		return new ModelAndView("redirect:/manage/app/handleHorizontalScale?appAuditId=" + appAuditId);
+	@RequestMapping(value = "/checkHorizontalScale")
+	public ModelAndView doCheckHorizontalScale(HttpServletRequest request, HttpServletResponse response, Model model,
+			long sourceId, long targetId, int startSlot, int endSlot, long appId, long appAuditId, int migrateType) {
+		HorizontalResult horizontalResult = appDeployCenter.checkHorizontal(appId, appAuditId, sourceId, targetId,
+				startSlot, endSlot, migrateType);
+		model.addAttribute("status", horizontalResult.getStatus());
+		model.addAttribute("message", horizontalResult.getMessage());
+		return new ModelAndView("");
+	}
+	
+	/**
+	 * 开始水平扩容
+	 * @param sourceId 源实例ID
+	 * @param targetId 目标实例ID
+	 * @param startSlot 开始slot
+	 * @param endSlot 结束slot
+	 * @param appId 应用id
+	 * @param appAuditId 审批id
+	 * @return
+	 */
+	@RequestMapping(value = "/startHorizontalScale")
+	public ModelAndView doStartHorizontalScale(HttpServletRequest request, HttpServletResponse response, Model model,
+			long sourceId, long targetId, int startSlot, int endSlot, long appId, long appAuditId, int migrateType) {
+		AppUser appUser = getUserInfo(request);
+		logger.warn("user {} horizontalScaleApply appId {} appAuditId {} sourceId {} targetId {} startSlot {} endSlot {}",
+				appUser.getName(), appId, appAuditId, sourceId, targetId, startSlot, endSlot);
+		HorizontalResult horizontalResult = appDeployCenter.startHorizontal(appId, appAuditId, sourceId, targetId,
+				startSlot, endSlot, migrateType);
+        model.addAttribute("status", horizontalResult.getStatus());
+		model.addAttribute("message", horizontalResult.getMessage());
+		return new ModelAndView("");
 	}
 
 	/**
@@ -347,9 +363,12 @@ public class AppManageController extends BaseController {
 		// 实例所在机器信息
         fillAppMachineStat(appAudit.getAppId(), model);
 
-		model.addAttribute("appAuditId", appAuditId);
+		long appId = appAudit.getAppId();
+		AppDesc appDesc = appService.getByAppId(appId);
+        model.addAttribute("appAuditId", appAuditId);
 		model.addAttribute("appId", appAudit.getAppId());
-
+        model.addAttribute("appDesc", appDesc);
+		
 		return new ModelAndView("manage/appAudit/initAppScaleApply");
 	}
 
@@ -401,6 +420,25 @@ public class AppManageController extends BaseController {
 
 		return new ModelAndView("manage/appAudit/initAppDeploy");
 	}
+	
+	/**
+     * 应用部署配置检查
+     * @return
+     */
+    @RequestMapping(value = "/appDeployCheck")
+    public ModelAndView doAppDeployCheck(HttpServletRequest request, HttpServletResponse response, Model model, String appDeployText,
+            Long appAuditId) {
+        DataFormatCheckResult dataFormatCheckResult = null;
+        try {
+            dataFormatCheckResult = appDeployCenter.checkAppDeployDetail(appAuditId, appDeployText);
+        } catch (Exception e) {
+            logger.error(e.getMessage(), e);
+            dataFormatCheckResult = DataFormatCheckResult.fail(ErrorMessageEnum.INNER_ERROR_MSG.getMessage());
+        }
+        model.addAttribute("status", dataFormatCheckResult.getStatus());
+        model.addAttribute("message", dataFormatCheckResult.getMessage());
+        return new ModelAndView("");
+    }
 
 	/**
 	 * 添加应用部署
@@ -424,7 +462,8 @@ public class AppManageController extends BaseController {
 			logger.error("appDeploy error param: appDeployText={},appAuditId:{}", appDeployText, appAuditId);
 		}
         logger.warn("user {} appDeploy: appDeployText={},appAuditId:{}, result is {}", appUser.getName(), appDeployText, appAuditId, isSuccess);
-		return new ModelAndView("redirect:/manage/app/auditList");
+        model.addAttribute("status", isSuccess ? 1 : 0);
+        return new ModelAndView("");
 	}
 
 	/**
@@ -524,46 +563,6 @@ public class AppManageController extends BaseController {
 	}
 	
 	
-	/**
-	 * app最前，其余按照空闲内存倒排序
-	 * 
-	 * @param appHostSet
-	 * @param machineList
-	 * @return
-	 */
-	private List<MachineStats> sortByAppAndMachineTotalMem(
-			Set<String> appHostSet, List<MachineStats> machineList) {
-		if (CollectionUtils.isEmpty(machineList)) {
-			return Collections.emptyList();
-		}
-		List<MachineStats> resultList = new ArrayList<MachineStats>();
-		// 分为两组,当前app的一组其余的一组
-		List<MachineStats> appList = new ArrayList<MachineStats>();
-		List<MachineStats> otherList = new ArrayList<MachineStats>();
-		for (MachineStats machineStat : machineList) {
-			if (appHostSet.contains(machineStat.getIp())) {
-				appList.add(machineStat);
-			} else {
-				otherList.add(machineStat);
-			}
-		}
-		// 按照机器内存倒序
-		Collections.sort(otherList, new Comparator<MachineStats>() {
-			@Override
-			public int compare(MachineStats m1, MachineStats m2) {
-				long m1Total = NumberUtils.toLong(m1.getMemoryFree())
-						- m1.getMachineMemInfo().getLockedMem();
-				long m2Total = NumberUtils.toLong(m2.getMemoryFree())
-						- m2.getMachineMemInfo().getLockedMem();
-				return (int) ((m2Total - m1Total) / 1024 / 1024);
-			}
-		});
-		// 添加
-		resultList.addAll(appList);
-		resultList.addAll(otherList);
-		return resultList;
-	}
-
 	/**
 	 * 应用运维
 	 * @param appId
@@ -744,5 +743,27 @@ public class AppManageController extends BaseController {
 	    logger.warn("user {} sentinelFailOver, appId:{}, result is {}", appUser.getName(), appId, success);
 		write(response, String.valueOf(success == true ? SuccessEnum.SUCCESS.value() : SuccessEnum.FAIL.value()));
 	}
+    
+    /**
+     * 应用重要性级别
+     */
+    @RequestMapping(value = "/updateAppImportantLevel")
+    public ModelAndView doUpdateAppImportantLevel(HttpServletRequest request, HttpServletResponse response, Model model) {
+        long appId = NumberUtils.toLong(request.getParameter("appId"));
+        int importantLevel = NumberUtils.toInt(request.getParameter("importantLevel"));
+        SuccessEnum successEnum = SuccessEnum.FAIL;
+        if (appId > 0 && importantLevel >= 0) {
+            try {
+                AppDesc appDesc = appService.getByAppId(appId);
+                appDesc.setImportantLevel(importantLevel);
+                appService.update(appDesc);
+                successEnum = SuccessEnum.SUCCESS;
+            } catch (Exception e) {
+                logger.error(e.getMessage(), e);
+            }
+        }
+        model.addAttribute("status", successEnum.value());
+        return new ModelAndView("");
+    }
 
 }

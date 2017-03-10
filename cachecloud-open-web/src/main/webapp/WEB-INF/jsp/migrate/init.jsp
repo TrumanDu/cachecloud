@@ -6,6 +6,7 @@
 <head>
     <title>迁移数据</title>
     <jsp:include page="/WEB-INF/include/head.jsp"/>
+    <script type="text/javascript" src="/resources/js/myPopover.js"></script>
     <script type="text/javascript">
     
     	function changeDataType(appIdId,serversId, choose) {
@@ -66,12 +67,13 @@
     	function checkMigrateFormat() {
     		var sourceRedisMigrateIndex = document.getElementById("sourceRedisMigrateIndex").value;
     		var targetRedisMigrateIndex = document.getElementById("targetRedisMigrateIndex").value;
-    		
     		var sourceServers = document.getElementById("sourceServers");
     		var sourceAppId = document.getElementById("sourceAppId");
     		var sourceDataType = document.getElementById("sourceDataType").value;
-    		
     		var migrateMachineIp = document.getElementById("migrateMachineIp").value;
+    		var redisSourcePass = document.getElementById("redisSourcePass");
+    		var redisTargetPass = document.getElementById("redisTargetPass");
+
     		
 			//非cachecloud
     		if (sourceDataType == 0 && sourceServers.value == "") {
@@ -93,12 +95,7 @@
     		var targetServers = document.getElementById("targetServers");
     		var targetDataType = document.getElementById("targetDataType").value;
 			//非cachecloud
-    		if (targetDataType == 0 && targetServers.value == "") {
-   				alert("目标实例信息不能为空!");
-   				targetServers.focus();
-   				return false;
-    		//cachecloud
-    		} else if(targetDataType == 1 && targetAppId.value == "") {
+    		if(targetDataType == 1 && targetAppId.value == "") {
    				alert("目标appId不能为空!");
    				targetAppId.focus();
    				return false;
@@ -115,7 +112,9 @@
     				targetRedisMigrateIndex: targetRedisMigrateIndex,
     				sourceServers:sourceServers.value,
     				targetServers:targetServers.value,
-    				migrateMachineIp:migrateMachineIp
+    				migrateMachineIp:migrateMachineIp,
+    				redisSourcePass:redisSourcePass.value,
+    				redisTargetPass:redisTargetPass.value
     			},
     	        function(data){
     				var status = data.status;
@@ -139,6 +138,8 @@
     		var migrateMachineIp = document.getElementById("migrateMachineIp").value;
     		var sourceAppId = document.getElementById("sourceAppId");
     		var targetAppId = document.getElementById("targetAppId");
+    		var redisSourcePass = document.getElementById("redisSourcePass");
+    		var redisTargetPass = document.getElementById("redisTargetPass");
 
     		$.get(
     			'/data/migrate/start.json',
@@ -149,7 +150,9 @@
     				targetServers: targetServers.value,
     				migrateMachineIp: migrateMachineIp,
     				sourceAppId: sourceAppId.value,
-    				targetAppId: targetAppId.value
+    				targetAppId: targetAppId.value,
+    				redisSourcePass: redisSourcePass.value,
+    				redisTargetPass:redisTargetPass.value
     			},
     	        function(data){
     				var status = data.status;
@@ -185,6 +188,11 @@
 									<div class="col-md-12">
 										<h4 class="page-header">
 											迁移工具配置
+											<button class="btn btn-success btn-sm" 
+										      data-container="body" data-toggle="popover" data-placement="top" 
+										      data-content="<a href='http://cachecloud.github.io/2016/06/28/1.2.%20%E8%BF%81%E7%A7%BB%E5%B7%A5%E5%85%B7%E4%BD%BF%E7%94%A8%E8%AF%B4%E6%98%8E/'>使用文档</a>" style="border-radius:100%">
+										      ?
+										   </button>
 										</h4>
 									</div>
 								</div>
@@ -235,6 +243,9 @@
 														<option value="2">
                                                             RDB-file
 														</option>
+														<option value="4">
+                                                            AOF-file
+														</option>
 													</select>
 												</div>
 											</div>
@@ -252,6 +263,9 @@
 														</option>
 														<option value="1">
 															Redis-cluster
+														</option>
+														<option value="2">
+                                                            RDB-file
 														</option>
 													</select>
 												</div>
@@ -320,6 +334,32 @@
 												</label>
 												<div class="col-md-5">
 													<input type="text" id="targetAppId" class="form-control"  onchange="fillAppInstanceList('targetServers', 'targetRedisMigrateIndex',this.id)"/>
+												</div>
+											</div>
+										</div>
+									</div>
+								</div>
+								
+								<div class="row">
+									<div class="col-md-12">
+										<div class="col-md-6">
+											<div class="form-group">
+												<label class="control-label col-md-3">
+													源密码:
+												</label>
+												<div class="col-md-5">
+													<input type="text" id="redisSourcePass" name="redisSourcePass" placeholder="没有无需填写" class="form-control"/>
+												</div>
+											</div>
+										</div>
+										
+										<div class="col-md-6">
+											<div class="form-group">
+												<label class="control-label col-md-3">
+													目标密码:
+												</label>
+												<div class="col-md-5">
+													<input type="text" id="redisTargetPass" name="redisTargetPass" placeholder="没有无需填写" class="form-control"/>
 												</div>
 											</div>
 										</div>

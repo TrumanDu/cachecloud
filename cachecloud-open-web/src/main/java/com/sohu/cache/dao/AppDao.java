@@ -77,13 +77,12 @@ public interface AppDao {
      */
     public int getAllAppCount(AppSearch appSearch);
 
-    
     /**
-     * 更新内存报警阀值
+     * 更新appKey
      * @param appId
-     * @param memAlertValue
+     * @param appKey
      */
-    public void updateMemAlertValue(@Param("appId") long appId, @Param("memAlertValue") int memAlertValue);
+    public void updateAppKey(@Param("appId") long appId, @Param("appKey") String appKey);
 
 
 }

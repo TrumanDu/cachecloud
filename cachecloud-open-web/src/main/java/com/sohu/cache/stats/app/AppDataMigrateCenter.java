@@ -5,7 +5,9 @@ import java.util.Map;
 
 import com.sohu.cache.constant.AppDataMigrateEnum;
 import com.sohu.cache.constant.AppDataMigrateResult;
+import com.sohu.cache.constant.CommandResult;
 import com.sohu.cache.constant.RedisMigrateToolConstant;
+import com.sohu.cache.entity.AppDataMigrateSearch;
 import com.sohu.cache.entity.AppDataMigrateStatus;
 
 /**
@@ -19,27 +21,18 @@ public interface AppDataMigrateCenter {
     
     /**
      * 检查配置
-     * @param migrateMachineIp
-     * @param sourceRedisMigrateEnum
-     * @param sourceServers
-     * @param targetAppId
-     * @return
-     */
-    AppDataMigrateResult check(String migrateMachineIp, AppDataMigrateEnum sourceRedisMigrateEnum, String sourceServers, long targetAppId);
-    
-
-    /**
-     * 检查配置
      * 
      * @param migrateMachineIp
      * @param sourceRedisMigrateEnum
      * @param sourceServers
      * @param targetRedisMigrateEnum
      * @param targetServers
-     * @return
+     * @param redisSourcePass
+     * @param redisTargetPass
+     * @return 
      */
     AppDataMigrateResult check(String migrateMachineIp, AppDataMigrateEnum sourceRedisMigrateEnum, String sourceServers,
-            AppDataMigrateEnum targetRedisMigrateEnum, String targetServers);
+            AppDataMigrateEnum targetRedisMigrateEnum, String targetServers, String redisSourcePass, String redisTargetPass);
 
     /**
      * 开始迁移
@@ -49,18 +42,20 @@ public interface AppDataMigrateCenter {
      * @param sourceServers
      * @param targetRedisMigrateEnum
      * @param targetServers
+     * @param redisSourcePass
+     * @param targetSourcePass
      * @return
      */
     boolean migrate(String migrateMachineIp, AppDataMigrateEnum sourceRedisMigrateEnum, String sourceServers,
-            AppDataMigrateEnum targetRedisMigrateEnum, String targetServers, long sourceAppId, long targetAppId, long userId);
+            AppDataMigrateEnum targetRedisMigrateEnum, String targetServers, long sourceAppId, long targetAppId, String redisSourcePass, String targetSourcePass, long userId);
 
 
     /**
-     * 列表
+     * 搜索列表
+     * @param appDataMigrateSearch
      * @return
      */
-    List<AppDataMigrateStatus> search();
-
+	List<AppDataMigrateStatus> search(AppDataMigrateSearch appDataMigrateSearch);
 
     /**
      * 查看日志
@@ -91,7 +86,7 @@ public interface AppDataMigrateCenter {
      * @param nums
      * @return
      */
-    String sampleCheckData(long id, int nums);
+    CommandResult sampleCheckData(long id, int nums);
 
 
     /**
@@ -100,5 +95,6 @@ public interface AppDataMigrateCenter {
      * @return
      */
     AppDataMigrateResult stopMigrate(long id);
+
     
 }

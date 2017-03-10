@@ -9,7 +9,7 @@
     <bean id="redisCenter" class="com.sohu.cache.redis.impl.RedisCenterImpl" init-method="init" destroy-method="destory"/>
 
     <!--machine调度接口-->
-    <bean id="machineCenter" class="com.sohu.cache.machine.impl.MachineCenterImpl" />
+    <bean id="machineCenter" class="com.sohu.cache.machine.impl.MachineCenterImpl"  init-method="init"/>
 
     <!--quartz调度接口-->
     <bean id="schedulerCenter" class="com.sohu.cache.schedule.impl.SchedulerCenterImpl" />
@@ -26,9 +26,6 @@
     <!--app deloy接口-->
     <bean id="appDeployCenter" class="com.sohu.cache.stats.app.impl.AppDeployCenterImpl"/>
 
-    <!--基于机器的统计的接口-->
-    <bean id="machineStatsCenter" class="com.sohu.cache.stats.machine.impl.MachineStatsCenterImpl"/>
-
     <bean id="redisDeployCenter" class="com.sohu.cache.redis.impl.RedisDeployCenterImpl"/>
 
     <bean id="machineDeployCenter" class="com.sohu.cache.machine.impl.MachineDeployCenterImpl"/>
@@ -41,5 +38,17 @@
     
     <bean id="appDataMigrateCenter" class="com.sohu.cache.stats.app.impl.AppDataMigrateCenterImpl"/>
     
+    <bean id="redisConfigTemplateService" class="com.sohu.cache.redis.impl.RedisConfigTemplateServiceImpl"/>
+
+    <!-- 服务器状况服务 -->
+    <bean id="nmonService" class="com.sohu.cache.server.nmon.NMONService"/>
+    
+    <bean id="sshTemplate" class="com.sohu.cache.ssh.SSHTemplate"/>
+    
+    <bean id="serverStatusCollector" class="com.sohu.cache.server.ServerStatusCollector" init-method="init"/>
+    
+    <bean id="serverDataService" class="com.sohu.cache.web.service.impl.ServerDataServiceImpl"/>
+    
+    <bean id="instanceAlertValueService" class="com.sohu.cache.stats.instance.impl.InstanceAlertValueServiceImpl"/>
 
 </beans>

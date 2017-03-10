@@ -3,7 +3,9 @@ package com.sohu.cache.web.service.impl;
 import com.sohu.cache.constant.*;
 import com.sohu.cache.dao.*;
 import com.sohu.cache.entity.*;
+import com.sohu.cache.machine.MachineCenter;
 import com.sohu.cache.redis.RedisCenter;
+import com.sohu.cache.util.AppKeyUtil;
 import com.sohu.cache.util.TypeUtil;
 import com.sohu.cache.web.enums.SuccessEnum;
 import com.sohu.cache.web.service.AppService;
@@ -62,7 +64,7 @@ public class AppServiceImpl implements AppService {
 
     private RedisCenter redisCenter;
 
-    private MachineDao machineDao;
+    private MachineCenter machineCenter;
     
     private MachineStatsDao machineStatsDao;
     
@@ -137,16 +139,20 @@ public class AppServiceImpl implements AppService {
     public void updateAppAuditStatus(Long id, Long appId, Integer status, AppUser appUser) {
         appAuditDao.updateAppAudit(id, status);
         AppDesc appDesc = appDao.getAppDescById(appId);
-        
-        if (AppCheckEnum.APP_PASS.value().equals(status)) {
-            appDesc.setStatus(AppStatusEnum.STATUS_PUBLISHED.getStatus());
-            appDesc.setPassedTime(new Date());
-            appDao.update(appDesc);
-        } else if (AppCheckEnum.APP_REJECT.value().equals(status)) {
-            appDesc.setStatus(AppStatusEnum.STATUS_DENY.getStatus());
-            appDao.update(appDesc);
-        }
         AppAudit appAudit = appAuditDao.getAppAudit(id);
+        
+        // 只有应用创建才会设置状态
+        if (AppAuditType.APP_AUDIT.getValue() == appAudit.getType()) {
+            if (AppCheckEnum.APP_PASS.value().equals(status)) {
+                appDesc.setStatus(AppStatusEnum.STATUS_PUBLISHED.getStatus());
+                appDesc.setPassedTime(new Date());
+                appDao.update(appDesc);
+            } else if (AppCheckEnum.APP_REJECT.value().equals(status)) {
+                appDesc.setStatus(AppStatusEnum.STATUS_DENY.getStatus());
+                appDao.update(appDesc);
+            }
+        }
+        
         // 保存审批日志
         AppAuditLog appAuditLog = AppAuditLog.generate(appDesc, appUser, appAudit.getId(),
                 AppAuditLogTypeEnum.APP_CHECK);
@@ -318,28 +324,6 @@ public class AppServiceImpl implements AppService {
         return appAudit;
     }
     
-
-    @Override
-    public SuccessEnum updateMemAlertValue(Long appId, Integer memAlertValue, AppUser userInfo) {
-        try {
-            appDao.updateMemAlertValue(appId, memAlertValue);
-
-            //保存日志
-            AppDesc appDesc = appDao.getAppDescById(appId);
-            //修改阀值，保存日志
-            AppAuditLog appAuditLog = AppAuditLog.generate(appDesc, userInfo, 0L,
-                    AppAuditLogTypeEnum.APP_CHANGE_MEM_ALERT);
-            if (appAuditLog != null) {
-                appAuditLogDao.save(appAuditLog);
-            }
-
-            return SuccessEnum.SUCCESS;
-        } catch (Exception e) {
-            logger.error(e.getMessage(), e);
-            return SuccessEnum.FAIL;
-        }
-    }
-
     @Override
     public SuccessEnum updateRefuseReason(AppAudit appAudit, AppUser userInfo) {
         try {
@@ -402,8 +386,12 @@ public class AppServiceImpl implements AppService {
             int memoryHost = instanceDao.getMemoryByHost(ip);
             machineStats.setMemoryAllocated(memoryHost);
             //机器信息
-            MachineInfo machineInfo = machineDao.getMachineInfoByIp(ip);
+            MachineInfo machineInfo = machineCenter.getMachineInfoByIp(ip);
             if (machineInfo == null) {
+                continue;
+            }
+            //下线机器不展示
+            if (machineInfo.isOffline()) {
                 continue;
             }
             machineStats.setInfo(machineInfo);
@@ -452,6 +440,37 @@ public class AppServiceImpl implements AppService {
     public List<AppDesc> getAllAppDesc() {
         return appDao.getAllAppDescList(null);
     }
+    
+    @Override
+    public SuccessEnum changeAppAlertConfig(long appId, int memAlertValue, int clientConnAlertValue, AppUser appUser) {
+        if (appId <= 0 || memAlertValue <= 0 || clientConnAlertValue <= 0) {
+            return SuccessEnum.FAIL;
+        }
+        AppDesc appDesc = appDao.getAppDescById(appId);
+        if (appDesc == null) {
+            return SuccessEnum.FAIL;
+        }
+        try {
+            // 修改报警阀值
+            appDesc.setMemAlertValue(memAlertValue);
+            appDesc.setClientConnAlertValue(clientConnAlertValue);
+            appDao.update(appDesc);
+            // 添加日志
+            AppAuditLog appAuditLog = AppAuditLog.generate(appDesc, appUser, 0L, AppAuditLogTypeEnum.APP_CHANGE_ALERT);
+            if (appAuditLog != null) {
+                appAuditLogDao.save(appAuditLog);
+            }
+            return SuccessEnum.SUCCESS;
+        } catch (Exception e) {
+            logger.error(e.getMessage(), e);
+            return SuccessEnum.FAIL;
+        }
+    }
+    
+    @Override
+    public void updateAppKey(long appId) {
+        appDao.updateAppKey(appId, AppKeyUtil.genSecretKey(appId));
+    }
 
     public void setAppDao(AppDao appDao) {
         this.appDao = appDao;
@@ -481,8 +500,8 @@ public class AppServiceImpl implements AppService {
         this.redisCenter = redisCenter;
     }
 
-    public void setMachineDao(MachineDao machineDao) {
-        this.machineDao = machineDao;
+    public void setMachineCenter(MachineCenter machineCenter) {
+        this.machineCenter = machineCenter;
     }
 
     public void setMachineStatsDao(MachineStatsDao machineStatsDao) {
@@ -494,6 +513,5 @@ public class AppServiceImpl implements AppService {
     }
 
     
-
 
 }
