@@ -12,13 +12,13 @@ WORKDIR ${base_dir}
 RUN apk  --update add curl tar bash
 RUN    curl -fsSL -o /tmp/cachecloud.tar.gz https://github.com/sohutv/cachecloud/archive/${CACHECLOUD_VERSION}.tar.gz && \
        tar -C /tmp -xzf /tmp/cachecloud.tar.gz
-RUN    rm -rf /tmp/cachecloud.tar.gz 
-RUN    cd /tmp/cachecloud 
+RUN    rm -rf /tmp/cachecloud.tar.gz
+RUN    cd /tmp/cachecloud-${CACHECLOUD_VERSION}
 RUN    mvn clean compile install -Plocal 
 RUN    mkdir -p ${base_dir}/logs && \
-    cp /tmp/cachecloud/script/start.sh ${base_dir} && \
-    cp /tmp/cachecloud/cachecloud-open-web/target/cachecloud-open-web-1.0-SNAPSHOT.war ${base_dir} && \
-    cp /tmp/cachecloud/cachecloud-open-web/src/main/resources/cachecloud-web.conf  ${base_dir}/cachecloud-open-web-1.0-SNAPSHOT.conf
+    cp /tmp/cachecloud-${CACHECLOUD_VERSION}/script/start.sh ${base_dir} && \
+    cp /tmp/cachecloud-${CACHECLOUD_VERSION}/cachecloud-open-web/target/cachecloud-open-web-1.0-SNAPSHOT.war ${base_dir} && \
+    cp /tmp/cachecloud-${CACHECLOUD_VERSION}/cachecloud-open-web/src/main/resources/cachecloud-web.conf  ${base_dir}/cachecloud-open-web-1.0-SNAPSHOT.conf
 
 VOLUME ${base_dir}
 COPY start-container.sh ${base_dir}
