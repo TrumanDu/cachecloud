@@ -9,10 +9,10 @@ MAINTAINER truman
 ENV CACHECLOUD_VERSION 1.2
 ENV base_dir /opt/cachecloud-web
 WORKDIR ${base_dir}
-RUN apk add --update curl tar bash && \
-    mkdir -p /opt/app && \
+RUN apk  --update add curl tar bash && \
+    mkdir /opt && \
     curl -o /tmp/cachecloud.tar.gz https://github.com/sohutv/cachecloud/archive/${CACHECLOUD_VERSION}.tar.gz && \
-    tar xvf /tmp/cachecloud.tar.gz && \
+    tar xvf /tmp/cachecloud.tar.gz -C /tmp && \
     rm -rf /tmp/cachecloud.tar.gz && \
     cd /tmp/cachecloud && \
     mvn clean compile install -Plocal && \
