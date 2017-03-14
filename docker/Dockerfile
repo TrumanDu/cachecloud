@@ -11,6 +11,7 @@ ENV base_dir /opt/cachecloud-web
 WORKDIR ${base_dir}
 RUN apk  --update add curl tar bash 
 RUN    curl -o /tmp/cachecloud.tar.gz https://github.com/sohutv/cachecloud/archive/${CACHECLOUD_VERSION}.tar.gz 
+RUN    mkdir /tmp 
 RUN    tar xvf /tmp/cachecloud.tar.gz -C /tmp 
 RUN    rm -rf /tmp/cachecloud.tar.gz 
 RUN    cd /tmp/cachecloud 
