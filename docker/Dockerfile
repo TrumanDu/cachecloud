@@ -21,5 +21,5 @@ RUN apk  --update add curl tar bash  && \
        cp /tmp/cachecloud-${CACHECLOUD_VERSION}/cachecloud-open-web/src/main/resources/cachecloud-web.conf  ${base_dir}/cachecloud-open-web-1.0-SNAPSHOT.conf
 VOLUME ${base_dir}
 COPY start-container.sh ${base_dir}
-ENTRYPOINT  ["bash","start-container.sh"]
+CMD  ["bash","start-container.sh"]
 EXPOSE 9999 8585
