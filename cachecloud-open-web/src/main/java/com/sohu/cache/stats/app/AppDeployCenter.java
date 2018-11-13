@@ -4,10 +4,9 @@ import com.sohu.cache.constant.DataFormatCheckResult;
 import com.sohu.cache.constant.HorizontalResult;
 import com.sohu.cache.entity.AppDesc;
 import com.sohu.cache.entity.AppUser;
-import com.sohu.cache.redis.ReshardProcess;
+import com.sohu.cache.entity.InstanceReshardProcess;
 
 import java.util.List;
-import java.util.concurrent.ConcurrentMap;
 
 /**
  * app相关发布操作
@@ -110,6 +109,13 @@ public interface AppDeployCenter {
             int endSlot, int migrateType);
     
     /**
+     * 重试水平扩容
+     * @param instanceReshardProcessId
+     * @return
+     */
+    public HorizontalResult retryHorizontal(final int instanceReshardProcessId);
+    
+    /**
      * 添加cluster一个主(从)节点
      *
      * @param appId
@@ -126,7 +132,7 @@ public interface AppDeployCenter {
      *
      * @return
      */
-    public ConcurrentMap<Long, ReshardProcess> getHorizontalProcess();
+    public List<InstanceReshardProcess> getHorizontalProcess(long auditId);
     
     
     /**

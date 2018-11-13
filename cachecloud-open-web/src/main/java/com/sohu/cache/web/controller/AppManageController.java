@@ -2,14 +2,15 @@ package com.sohu.cache.web.controller;
 
 import com.sohu.cache.web.enums.RedisOperateEnum;
 import com.sohu.cache.constant.AppCheckEnum;
+import com.sohu.cache.constant.ClusterOperateResult;
 import com.sohu.cache.constant.DataFormatCheckResult;
 import com.sohu.cache.constant.ErrorMessageEnum;
 import com.sohu.cache.constant.HorizontalResult;
+import com.sohu.cache.dao.InstanceReshardProcessDao;
 import com.sohu.cache.entity.*;
 import com.sohu.cache.machine.MachineCenter;
 import com.sohu.cache.redis.RedisCenter;
 import com.sohu.cache.redis.RedisDeployCenter;
-import com.sohu.cache.redis.ReshardProcess;
 import com.sohu.cache.stats.app.AppDailyDataCenter;
 import com.sohu.cache.stats.app.AppDeployCenter;
 import com.sohu.cache.stats.instance.InstanceDeployCenter;
@@ -21,7 +22,6 @@ import com.sohu.cache.web.util.DateUtil;
 
 import net.sf.json.JSONArray;
 
-import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.math.NumberUtils;
 import org.apache.commons.lang.time.DateUtils;
@@ -38,8 +38,6 @@ import javax.servlet.http.HttpServletResponse;
 
 import java.text.ParseException;
 import java.util.*;
-import java.util.Map.Entry;
-import java.util.concurrent.ConcurrentMap;
 
 /**
  * 应用后台管理
@@ -73,6 +71,9 @@ public class AppManageController extends BaseController {
 
 	@Resource(name = "appDailyDataCenter")
     private AppDailyDataCenter appDailyDataCenter;
+	
+    @Resource(name = "instanceReshardProcessDao")
+	private InstanceReshardProcessDao instanceReshardProcessDao;
 	
 	@RequestMapping("/appDaily")
     public ModelAndView appDaily(HttpServletRequest request, HttpServletResponse response, Model model) throws ParseException {
@@ -261,8 +262,8 @@ public class AppManageController extends BaseController {
 		model.addAttribute("appId", appAudit.getAppId());
 
 		// 2. 进度
-		ConcurrentMap<Long, ReshardProcess> appScaleProcessMap = appDeployCenter.getHorizontalProcess();
-		model.addAttribute("appScaleProcessMap", appScaleProcessMap);
+		List<InstanceReshardProcess> instanceReshardProcessList = instanceReshardProcessDao.getByAuditId(appAudit.getId());
+		model.addAttribute("instanceReshardProcessList", instanceReshardProcessList);
 
 		// 3. 实例列表和统计
 		fillAppInstanceStats(appAudit.getAppId(), model);
@@ -277,32 +278,33 @@ public class AppManageController extends BaseController {
 	 */
 	@RequestMapping(value = "/showReshardProcess")
 	public ModelAndView doShowReshardProcess(HttpServletRequest request, HttpServletResponse response, Model model) {
-		ConcurrentMap<Long, ReshardProcess> appScaleProcessMap = appDeployCenter.getHorizontalProcess();
-		write(response, filterMapToJsonArray(appScaleProcessMap));
-		return null;
+	    long auditId = NumberUtils.toLong(request.getParameter("auditId"));
+        List<InstanceReshardProcess> instanceReshardProcessList = instanceReshardProcessDao.getByAuditId(auditId);
+        write(response, JSONArray.fromObject(instanceReshardProcessList).toString());
+        return null;
 	}
 
-	/**
-	 * 把Map组装成JsonArray
-	 * 
-	 * @param appScaleProcessMap
-	 * @return
-	 */
-	private String filterMapToJsonArray(ConcurrentMap<Long, ReshardProcess> appScaleProcessMap) {
-		if (MapUtils.isEmpty(appScaleProcessMap)) {
-			return "[]";
-		}
-		List<Map<String, Object>> list = new ArrayList<Map<String, Object>>();
-		for (Entry<Long, ReshardProcess> entry : appScaleProcessMap.entrySet()) {
-			Map<String, Object> map = new HashMap<String, Object>();
-			map.put("appId", entry.getKey());
-			map.put("reshardSlot", entry.getValue().getReshardSlot());
-			map.put("totalSlot", entry.getValue().getTotalSlot());
-			map.put("status", entry.getValue().getStatus());
-			list.add(map);
-		}
-		return JSONArray.fromObject(list).toString();
-	}
+//	/**
+//     * 把Map组装成JsonArray
+//     * 
+//     * @param appScaleProcessMap
+//     * @return
+//     */
+//    private String filterMapToJsonArray(ConcurrentMap<Long, ReshardProcess> appScaleProcessMap) {
+//        if (MapUtils.isEmpty(appScaleProcessMap)) {
+//            return "[]";
+//        }
+//        List<Map<String, Object>> list = new ArrayList<Map<String, Object>>();
+//        for (Entry<Long, ReshardProcess> entry : appScaleProcessMap.entrySet()) {
+//            Map<String, Object> map = new HashMap<String, Object>();
+//            map.put("appId", entry.getKey());
+//            map.put("reshardSlot", entry.getValue().getReshardSlot());
+//            map.put("totalSlot", entry.getValue().getTotalSlot());
+//            map.put("status", entry.getValue().getStatus());
+//            list.add(map);
+//        }
+//        return JSONArray.fromObject(list).toString();
+//    }
 
 	/**
 	 * 水平扩容配置检查
@@ -346,6 +348,21 @@ public class AppManageController extends BaseController {
 		model.addAttribute("message", horizontalResult.getMessage());
 		return new ModelAndView("");
 	}
+	
+	/**
+	 * 重试水平扩容
+	 * @param instanceReshardProcessId
+	 * @return
+	 */
+    @RequestMapping(value = "/retryHorizontalScale")
+    public ModelAndView retryHorizontalScale(HttpServletRequest request, HttpServletResponse response, Model model, int instanceReshardProcessId) {
+        AppUser appUser = getUserInfo(request);
+        logger.warn("user {} retryHorizontalScale id {}", appUser.getName(), instanceReshardProcessId);
+        HorizontalResult horizontalResult = appDeployCenter.retryHorizontal(instanceReshardProcessId);
+        model.addAttribute("status", horizontalResult.getStatus());
+        model.addAttribute("message", horizontalResult.getMessage());
+        return new ModelAndView("");
+    }
 
 	/**
 	 * 处理应用扩容
@@ -624,6 +641,46 @@ public class AppManageController extends BaseController {
 		}
 		return new ModelAndView("manage/appOps/appInfoAndAudit");
 	}
+	
+	/**
+     * redisCluster节点删除: forget + shutdown
+     * 
+     * @param appId 应用id
+     * @param forgetInstanceId 需要被forget的节点
+     * @return
+     */
+    @RequestMapping("/clusterDelNode")
+    public ModelAndView clusterDelNode(HttpServletRequest request, HttpServletResponse response, Model model, Long appId,
+            int delNodeInstanceId) {
+        AppUser appUser = getUserInfo(request);
+        logger.warn("user {}, clusterForget: appId:{}, instanceId:{}", appUser.getName(), appId, delNodeInstanceId);
+        // 检测forget条件
+        ClusterOperateResult checkClusterForgetResult = null;
+        try {
+            checkClusterForgetResult = redisDeployCenter.checkClusterForget(appId, delNodeInstanceId);
+        } catch (Exception e) {
+            logger.error(e.getMessage(), e);
+        }
+        if (checkClusterForgetResult == null || !checkClusterForgetResult.isSuccess()) {
+            model.addAttribute("success", checkClusterForgetResult.getStatus());
+            model.addAttribute("message", checkClusterForgetResult.getMessage());
+            return new ModelAndView("");
+        }
+        
+        // 执行delnode:forget + shutdown
+        ClusterOperateResult delNodeResult = null;
+        try {
+            delNodeResult = redisDeployCenter.delNode(appId, delNodeInstanceId);
+        } catch (Exception e) {
+            logger.error(e.getMessage(), e);
+        }
+        model.addAttribute("success", delNodeResult.getStatus());
+        model.addAttribute("message", delNodeResult.getMessage());
+        logger.warn("user {}, clusterForget: appId:{}, instanceId:{}, result is {}", appUser.getName(), appId, delNodeInstanceId, delNodeResult.getStatus());
+        
+        return new ModelAndView("");
+        
+    }
 
 	/**
 	 * redisCluster从节点failover
@@ -636,17 +693,18 @@ public class AppManageController extends BaseController {
 	public void clusterSlaveFailOver(HttpServletRequest request, HttpServletResponse response, Model model, Long appId,
 			int slaveInstanceId) {
 		boolean success = false;
-		logger.warn("clusterSlaveFailOver: appId:{}, slaveInstanceId:{}", appId, slaveInstanceId);
+		String failoverParam = request.getParameter("failoverParam");
+		logger.warn("clusterSlaveFailOver: appId:{}, slaveInstanceId:{}, failoverParam:{}", appId, slaveInstanceId, failoverParam);
 		if (appId != null && appId > 0 && slaveInstanceId > 0) {
 			try {
-				success = redisDeployCenter.clusterFailover(appId,slaveInstanceId);
+				success = redisDeployCenter.clusterFailover(appId, slaveInstanceId, failoverParam);
 			} catch (Exception e) {
 				logger.error(e.getMessage(), e);
 			}
 		} else {
-			logger.error("error param clusterSlaveFailOver: appId:{}, slaveInstanceId:{}", appId, slaveInstanceId);
+			logger.error("error param clusterSlaveFailOver: appId:{}, slaveInstanceId:{}, failoverParam:{}", appId, slaveInstanceId, failoverParam);
 		}
-	    logger.warn("clusterSlaveFailOver: appId:{}, slaveInstanceId:{}, result is {}", appId, slaveInstanceId, success);
+	    logger.warn("clusterSlaveFailOver: appId:{}, slaveInstanceId:{}, failoverParam:{}, result is {}", appId, slaveInstanceId, failoverParam, success);
 		write(response, String.valueOf(success == true ? SuccessEnum.SUCCESS.value() : SuccessEnum.FAIL.value()));
 	}
 
@@ -756,6 +814,28 @@ public class AppManageController extends BaseController {
             try {
                 AppDesc appDesc = appService.getByAppId(appId);
                 appDesc.setImportantLevel(importantLevel);
+                appService.update(appDesc);
+                successEnum = SuccessEnum.SUCCESS;
+            } catch (Exception e) {
+                logger.error(e.getMessage(), e);
+            }
+        }
+        model.addAttribute("status", successEnum.value());
+        return new ModelAndView("");
+    }
+    
+    /**
+     * 更新应用密码
+     */
+    @RequestMapping(value = "/updateAppPassword")
+    public ModelAndView doUpdateAppPassword(HttpServletRequest request, HttpServletResponse response, Model model) {
+        long appId = NumberUtils.toLong(request.getParameter("appId"));
+        String password = request.getParameter("password");
+        SuccessEnum successEnum = SuccessEnum.FAIL;
+        if (appId > 0) {
+            try {
+                AppDesc appDesc = appService.getByAppId(appId);
+                appDesc.setPassword(password);
                 appService.update(appDesc);
                 successEnum = SuccessEnum.SUCCESS;
             } catch (Exception e) {

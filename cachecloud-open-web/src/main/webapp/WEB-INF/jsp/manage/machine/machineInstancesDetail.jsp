@@ -1,13 +1,14 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
 <%@ include file="/WEB-INF/jsp/manage/commons/taglibs.jsp"%>
 <script type="text/javascript">
-	function startInstance(instanceId){
+	function startInstance(appId, instanceId){
 		if(confirm("确认要开启"+instanceId+"实例吗?")){
 			$.ajax({
                 type: "get",
                 url: "/manage/instance/startInstance.json",
                 data: 
                 {
+                	appId: appId,
                 	instanceId: instanceId
                 },
                 success: function (result) {
@@ -22,13 +23,14 @@
         }
 	}
 	
-	function shutdownInstance(instanceId){
+	function shutdownInstance(appId, instanceId){
 		if(confirm("确认要下线"+instanceId+"实例吗?")){
 			$.ajax({
                 type: "get",
                 url: "/manage/instance/shutdownInstance.json",
                 data: 
                 {
+                	appId: appId,
                 	instanceId: instanceId
                 },
                 success: function (result) {
@@ -72,6 +74,7 @@
 		                        <th>负责人</th>
 		                        <td>服务器ip:port</td>
 		                        <td>实例空间使用情况</td>
+		                        <td>连接数</td>
 		                        <td>角色</td>
 		                        <td>实例所在机器信息可用内存(G)</td>
 		                        <td>实例操作</td>
@@ -118,7 +121,8 @@
 		                                     </div>
 		                                </div>
 		                            </td>
-                            		<td>${instance.roleDesc}</td>
+                            		   <td>${(instanceStatsMap[instanceStatsMapKey]).currConnections}</td>
+                            		   <td>${instance.roleDesc}</td>
 		                            <td><fmt:formatNumber
 		                                    value="${(machineCanUseMem[instance.ip])/1024/1024/1024}"
 		                                    pattern="0.00"/>
@@ -126,12 +130,12 @@
 		                            <td>
                                         <c:choose>
                                             <c:when test="${instance.status == 2}">
-                                                <a target="_blank" onclick="startInstance('${instance.id}')" class="btn btn-success">
+                                                <a target="_blank" onclick="startInstance('${curAppId}', '${instance.id}')" class="btn btn-success">
                                                  	启动实例
                                                 </a>
                                             </c:when>
                                             <c:otherwise>
-                                                <a target="_blank" onclick="shutdownInstance('${instance.id}')" class="btn btn-danger">
+                                                <a target="_blank" onclick="shutdownInstance('${curAppId}', '${instance.id}')" class="btn btn-danger">
                                                     下线实例
                                                 </a>
                                             </c:otherwise>

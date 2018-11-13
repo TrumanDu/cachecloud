@@ -15,11 +15,14 @@ import com.sohu.cache.web.util.DateUtil;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang.BooleanUtils;
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang.time.DateUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.util.Assert;
 
+import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Created by yijunzhang on 14-9-17.
@@ -32,7 +35,7 @@ public class InstanceStatsCenterImpl implements InstanceStatsCenter {
     private InstanceStatsDao instanceStatsDao;
 
     private RedisCenter redisCenter;
-
+    
     @Override
     public InstanceInfo getInstanceInfo(long instanceId) {
         return instanceDao.getInstanceInfoById(instanceId);
@@ -47,10 +50,10 @@ public class InstanceStatsCenterImpl implements InstanceStatsCenter {
         }
         InstanceInfo instanceInfo = instanceDao.getInstanceInfoById(instanceId);
         int type = instanceInfo.getType();
-        boolean isRun = isRun(type, instanceInfo.getIp(), instanceInfo.getPort());
+        boolean isRun = redisCenter.isRun(instanceInfo.getAppId(), instanceInfo.getIp(), instanceInfo.getPort());
         instanceStats.setRun(isRun);
         if (isRun) {
-            Map<String, Object> infoMap = getInfoMap(type, instanceInfo.getIp(), instanceInfo.getPort());
+            Map<String, Object> infoMap = getInfoMap(instanceInfo.getAppId(), type, instanceInfo.getIp(), instanceInfo.getPort());
             instanceStats.setInfoMap(infoMap);
             if (infoMap == null || infoMap.isEmpty()) {
                 instanceStats.setRun(false);
@@ -59,12 +62,8 @@ public class InstanceStatsCenterImpl implements InstanceStatsCenter {
         return instanceStats;
     }
 
-    private boolean isRun(int type, String ip, int port) {
-        return redisCenter.isRun(ip, port);
-    }
-
-    private Map<String, Object> getInfoMap(int type, String ip, int port) {
-        Map<RedisConstant, Map<String, Object>> infoMap = redisCenter.getInfoStats(ip, port);
+    private Map<String, Object> getInfoMap(long appId, int type, String ip, int port) {
+        Map<RedisConstant, Map<String, Object>> infoMap = redisCenter.getInfoStats(appId, ip, port);
         Map<String, Object> resultMap = new LinkedHashMap<String, Object>();
         if (infoMap != null) {
             for (RedisConstant redisConstant : infoMap.keySet()) {
@@ -117,7 +116,7 @@ public class InstanceStatsCenterImpl implements InstanceStatsCenter {
             String ip = instance.getIp();
             int port = instance.getPort();
             int type = instance.getType();
-            Boolean isMaster = redisCenter.isMaster(ip, port);
+            Boolean isMaster = redisCenter.isMaster(appId, ip, port);
             if (BooleanUtils.isNotTrue(isMaster)){
                 continue;
             }
@@ -199,7 +198,7 @@ public class InstanceStatsCenterImpl implements InstanceStatsCenter {
     }
 
     @Override
-    public boolean saveStandardStats(Map<String, Object> infoMap, String ip, int port, String dbType) {
+    public boolean saveStandardStats(Map<String, Object> infoMap, Map<String, Object> clusterInfoMap, String ip, int port, String dbType) {
         Assert.isTrue(infoMap != null && infoMap.size() > 0);
         Assert.isTrue(StringUtils.isNotBlank(ip));
         Assert.isTrue(port > 0);
@@ -218,6 +217,7 @@ public class InstanceStatsCenterImpl implements InstanceStatsCenter {
             ss.setDiffMap(new HashMap<String, Object>(0));
         }
         ss.setInfoMap(infoMap);
+        ss.setClusterInfoMap(clusterInfoMap);
 
         int mergeCount = instanceStatsDao.mergeStandardStats(ss);
         return mergeCount > 0;
@@ -261,12 +261,32 @@ public class InstanceStatsCenterImpl implements InstanceStatsCenter {
 
     @Override
     public void cleanUpStandardStats(int day) {
-        Calendar calendar = Calendar.getInstance();
-        calendar.setTime(new Date());
-        calendar.add(Calendar.DAY_OF_MONTH, -Math.abs(day));
-        Date deleteTime = calendar.getTime();
-        int deleteCount = instanceStatsDao.deleteStandardStatsByCreatedTime(deleteTime);
-        logger.warn("cleanUpStandardStats: {} day deleteCount={}", day, deleteCount);
+        try {
+            SimpleDateFormat minSdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            SimpleDateFormat hourSdf = new SimpleDateFormat("yyyy-MM-dd HH");
+            // 基准时间
+            Date baseTime = DateUtils.addDays(hourSdf.parse(minSdf.format(new Date())), 0 - day);
+            Date startTime = null;          //删除开始时间
+            Date endTime = null;            //删除结束时间
+            int mins = 24 * 60 * (day - 1); //天换算分钟数,保留一天数据
+            int perMin = 10;                //每10分钟区间做一次删除
+            long beginTime = System.currentTimeMillis();
+            for (int count = 1; count <= mins / perMin; count++) {
+                startTime = DateUtils.addMinutes(baseTime, perMin * (count - 1));
+                endTime = DateUtils.addMinutes(baseTime, perMin * count);
+                long startMills = System.currentTimeMillis();
+                instanceStatsDao.deleteStandardStatsByScanTime(startTime, endTime);
+                logger.warn("execute delete task cost：{} ms ,time :{},{}", System.currentTimeMillis() - startMills, minSdf.format(startTime), minSdf.format(endTime));
+                try {
+                    TimeUnit.MILLISECONDS.sleep(10);
+                } catch (InterruptedException e) {
+                    logger.error(e.getMessage(), e);
+                }
+            }
+            logger.info("cleanUpStandardStats total costTime =" + (System.currentTimeMillis() - beginTime) / 1000 + " s");
+        } catch (Exception e) {
+            logger.error(e.getMessage(), e);
+        }
     }
 
     public void setInstanceDao(InstanceDao instanceDao) {
